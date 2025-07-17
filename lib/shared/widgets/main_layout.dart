@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/search/screens/search_screen.dart';
+import '../providers/bottom_nav_provider.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
   final Widget child;
@@ -15,7 +16,7 @@ class MainLayout extends ConsumerStatefulWidget {
 }
 
 class _MainLayoutState extends ConsumerState<MainLayout> {
-  int _selectedIndex = 0;
+  // int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -30,14 +31,17 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         }
 
         final navigationItems = _getNavigationItems(profile);
+        final selectedIndex = ref.watch(bottomNavProvider);
 
         return Scaffold(
           body: widget.child,
           bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex,
+            currentIndex: selectedIndex,
             onTap: (index) {
-              setState(() => _selectedIndex = index);
-              context.go(navigationItems[index]['route'] as String);
+              // setState(() => _selectedIndex = index);
+              // context.go(navigationItems[index]['route'] as String);
+                  ref.read(bottomNavProvider.notifier).state = index;
+        context.go(navigationItems[index]['route'] as String);
             },
             type: BottomNavigationBarType.fixed,
             backgroundColor: AppTheme.surfaceColor,

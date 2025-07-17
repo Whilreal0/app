@@ -10,6 +10,7 @@ import '../../home/providers/posts_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/providers/bottom_nav_provider.dart';
 
+
 class PostScreen extends ConsumerStatefulWidget {
   const PostScreen({Key? key}) : super(key: key);
 
@@ -95,13 +96,9 @@ class _PostScreenState extends ConsumerState<PostScreen> {
 
       // Schedule navigation for the next frame (most robust)
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop(true);
-        } else {
-          // Use go_router to go to home
-          context.go('/home'); // or your home route
-        }
-      });
+  ref.read(bottomNavProvider.notifier).state = 0; // Set index to home
+  context.go('/home'); // Always go to home
+});
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error:  ${e.toString()}')),
