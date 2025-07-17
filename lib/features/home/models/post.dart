@@ -31,4 +31,17 @@ class Post {
       createdAt: DateTime.parse(map['created_at']),
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'user_id': userId,
+      'username': username,
+      'avatar_url': avatarUrl,
+      'image_url': imageUrl,
+      'caption': caption,
+      'likes_count': likesCount,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
 }
