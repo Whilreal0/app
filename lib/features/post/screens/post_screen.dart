@@ -33,12 +33,12 @@ class _PostScreenState extends State<PostScreen> {
     final fileName = const Uuid().v4();
     final filePath = 'posts/$fileName.jpg';
     try {
-      final String uploadedPath = await storage.from('post-images').upload(filePath, image);
+      final uploadedPath = await storage.from('post-images').upload(filePath, image);
       // If upload is successful, get the public URL
       final publicUrl = storage.from('post-images').getPublicUrl(filePath);
       return publicUrl;
     } catch (e) {
-      // If upload fails, return null
+      print('Upload error: $e');
       return null;
     }
   }
@@ -94,7 +94,7 @@ class _PostScreenState extends State<PostScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Post')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
