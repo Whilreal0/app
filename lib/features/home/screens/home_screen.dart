@@ -62,16 +62,30 @@ class HomeScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Image
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(0), bottom: Radius.circular(0)),
-                      child: Image.network(
-                        post.imageUrl,
-                        width: double.infinity,
-                        height: 300,
-                        fit: BoxFit.cover,
+                    // Caption
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text(
+                        post.caption,
+                        style: const TextStyle(fontSize: 15),
                       ),
                     ),
+                    
+                    // Only show the image if imageUrl is not empty
+                    if (post.imageUrl.isNotEmpty)
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(0), bottom: Radius.circular(0)),
+                        child: Image.network(
+                          post.imageUrl,
+                          width: double.infinity,
+                          height: 300,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const SizedBox(
+                            height: 100,
+                            child: Center(child: Text('Image failed to load')),
+                          ),
+                        ),
+                      ),
                     // Action Row
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -103,14 +117,6 @@ class HomeScreen extends StatelessWidget {
                       child: Text(
                         'Liked by ${post.likesCount} others',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ),
-                    // Caption
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Text(
-                        post.caption,
-                        style: const TextStyle(fontSize: 15),
                       ),
                     ),
                     const SizedBox(height: 8),

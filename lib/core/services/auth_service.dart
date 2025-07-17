@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
+import '../../features/home/models/post.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -124,5 +125,17 @@ Future<void> signInWithUsernameOrEmail(String usernameOrEmail, String password) 
 
   if (authResponse.user == null) {
     throw Exception('Login failed');
+  }
+}
+
+// lib/core/services/post_service.dart
+class PostService {
+  final SupabaseClient _supabase = Supabase.instance.client;
+
+  Future<void> addPost(Post post) async {
+    print(post.toMap());
+    final response = await _supabase.from('posts').insert(post.toMap()).select().single();
+    // Optionally, you can return the created Post or handle errors here
+    // return Post.fromMap(response);
   }
 }
