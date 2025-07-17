@@ -36,8 +36,14 @@ class HomeScreen extends StatelessWidget {
                       child: Row(
                         children: [
                           CircleAvatar(
-                            backgroundImage: NetworkImage(post.avatarUrl),
+                            backgroundImage: post.avatarUrl != null && post.avatarUrl.isNotEmpty
+                                ? NetworkImage(post.avatarUrl)
+                                : null,
+                            backgroundColor: Colors.grey,
                             radius: 20,
+                            child: (post.avatarUrl == null || post.avatarUrl.isEmpty)
+                                ? Icon(Icons.person)
+                                : null,
                           ),
                           const SizedBox(width: 10),
                           Expanded(
