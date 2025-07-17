@@ -7,6 +7,7 @@ class Post {
   final String caption;
   final int likesCount;
   final DateTime createdAt;
+  final bool isLikedByMe;
 
   Post({
     required this.id,
@@ -17,6 +18,7 @@ class Post {
     required this.caption,
     required this.likesCount,
     required this.createdAt,
+    required this.isLikedByMe,
   });
 
   factory Post.fromMap(Map<String, dynamic> map) {
@@ -29,6 +31,7 @@ class Post {
       caption: map['caption'] ?? '',
       likesCount: map['likes_count'] ?? 0,
       createdAt: DateTime.parse(map['created_at']),
+      isLikedByMe: false, // Always false from DB!
     );
   }
 
@@ -43,5 +46,29 @@ class Post {
       'likes_count': likesCount,
       'created_at': createdAt.toIso8601String(),
     };
+  }
+
+  Post copyWith({
+    String? id,
+    String? userId,
+    String? username,
+    String? avatarUrl,
+    String? imageUrl,
+    String? caption,
+    int? likesCount,
+    DateTime? createdAt,
+    bool? isLikedByMe,
+  }) {
+    return Post(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      username: username ?? this.username,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      imageUrl: imageUrl ?? this.imageUrl,
+      caption: caption ?? this.caption,
+      likesCount: likesCount ?? this.likesCount,
+      createdAt: createdAt ?? this.createdAt,
+      isLikedByMe: isLikedByMe ?? this.isLikedByMe,
+    );
   }
 }
