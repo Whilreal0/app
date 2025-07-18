@@ -201,6 +201,47 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
     }
   }
 
+  Future<void> editComment(String commentId, String newContent) async {
+    if (userId == null) return;
+
+    // Store original state for rollback
+    final originalState = state;
+
+    try {
+      // Optimistically update UI
+      state.whenData((comments) {
+        final updatedComments = _updateCommentInState(comments, commentId, (comment) {
+          return comment.copyWith(
+            content: newContent,
+            isEditing: false, // Exit edit mode
+          );
+        });
+        state = AsyncValue.data(updatedComments);
+      });
+
+      // Call the service
+      final updatedComment = await CommentService().editComment(commentId, newContent);
+      
+      if (updatedComment != null) {
+        // Update with the real comment data
+        state.whenData((comments) {
+          final updatedComments = _updateCommentInState(comments, commentId, (comment) {
+            return updatedComment.copyWith(
+              isLikedByMe: comment.isLikedByMe, // Preserve like state
+              replies: comment.replies, // Preserve replies
+              nestingLevel: comment.nestingLevel, // Preserve nesting
+            );
+          });
+          state = AsyncValue.data(updatedComments);
+        });
+      }
+    } catch (e) {
+      print('Error editing comment: $e');
+      // Revert to original state on error
+      state = originalState;
+    }
+  }
+
   Future<void> deleteComment(String commentId) async {
     if (userId == null) return;
 

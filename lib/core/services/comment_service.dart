@@ -303,6 +303,38 @@ class CommentService {
     }
   }
 
+  // Edit a comment
+  Future<Comment?> editComment(String commentId, String newContent) async {
+    try {
+      final response = await _supabase
+          .from('comments')
+          .update({
+            'content': newContent,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', commentId)
+          .select()
+          .single();
+
+      // Get user profile for username and avatar
+      final userProfile = await _supabase
+          .from('profiles')
+          .select('username, avatar_url')
+          .eq('id', response['user_id'])
+          .single();
+
+      return Comment.fromMap({
+        ...response,
+        'username': userProfile['username'],
+        'avatar_url': userProfile['avatar_url'] ?? '',
+        'is_liked_by_me': false, // Will be updated by the provider
+      });
+    } catch (e) {
+      print('Error editing comment: $e');
+      return null;
+    }
+  }
+
   // Delete a comment
   Future<void> deleteComment(String commentId, String postId) async {
     try {

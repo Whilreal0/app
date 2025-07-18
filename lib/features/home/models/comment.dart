@@ -12,6 +12,7 @@ class Comment {
   final List<Comment> replies; // For nested replies
   final int nestingLevel; // Track nesting depth
   final bool isPosting; // Track if comment is being posted
+  final bool isEditing; // Track if comment is being edited
 
   Comment({
     required this.id,
@@ -27,6 +28,7 @@ class Comment {
     this.replies = const [],
     this.nestingLevel = 0,
     this.isPosting = false,
+    this.isEditing = false,
   });
 
   factory Comment.fromMap(Map<String, dynamic> map, {int nestingLevel = 0}) {
@@ -59,6 +61,7 @@ class Comment {
       replies: [], // Will be populated separately
       nestingLevel: nestingLevel,
       isPosting: false,
+      isEditing: false,
     );
   }
 
@@ -90,6 +93,7 @@ class Comment {
     List<Comment>? replies,
     int? nestingLevel,
     bool? isPosting,
+    bool? isEditing,
   }) {
     return Comment(
       id: id ?? this.id,
@@ -105,6 +109,7 @@ class Comment {
       replies: replies ?? this.replies,
       nestingLevel: nestingLevel ?? this.nestingLevel,
       isPosting: isPosting ?? this.isPosting,
+      isEditing: isEditing ?? this.isEditing,
     );
   }
 } 

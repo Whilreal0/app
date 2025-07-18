@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/comment.dart';
 import '../providers/comments_provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -18,14 +19,20 @@ class CommentsScreen extends ConsumerStatefulWidget {
 class _CommentsScreenState extends ConsumerState<CommentsScreen> {
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _replyController = TextEditingController();
+  final TextEditingController _editController = TextEditingController();
   String? _replyingToCommentId;
   String? _replyingToUsername;
   String? _parentCommentId; // Store the main comment ID for Facebook-style replies
+  String? _editingCommentId; // Store the comment being edited
+
+  // Getter for auth state
+  AsyncValue<User?> get authState => ref.watch(authStateProvider);
 
   @override
   void dispose() {
     _commentController.dispose();
     _replyController.dispose();
+    _editController.dispose();
     super.dispose();
   }
 
@@ -56,6 +63,61 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
       _parentCommentId = null;
     });
     _replyController.clear();
+  }
+
+  void _startEdit(Comment comment) {
+    if (!mounted) return;
+    setState(() {
+      _editingCommentId = comment.id;
+      _editController.text = comment.content;
+    });
+  }
+
+  void _cancelEdit() {
+    if (!mounted) return;
+    setState(() {
+      _editingCommentId = null;
+    });
+    _editController.clear();
+  }
+
+  Future<void> _submitEdit() async {
+    if (_editController.text.trim().isEmpty || _editingCommentId == null) return;
+
+    final newContent = _editController.text.trim();
+    _editController.clear();
+
+    await ref.read(commentsProvider(widget.postId).notifier).editComment(
+      _editingCommentId!,
+      newContent,
+    );
+
+    _cancelEdit();
+  }
+
+  Future<void> _deleteComment(Comment comment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Comment'),
+        content: const Text('Are you sure you want to delete this comment? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(commentsProvider(widget.postId).notifier).deleteComment(comment.id);
+    }
   }
 
   Future<void> _submitComment() async {
@@ -409,19 +471,77 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                       ),
                       const SizedBox(height: 8),
                       
-                      // Comment text
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-                        child: Text(
-                          comment.content,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            height: 1.4,
+                      // Comment text or edit input
+                      if (_editingCommentId == comment.id)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade900.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppTheme.primaryColor.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: TextField(
+                                  controller: _editController,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Edit your comment...',
+                                    border: InputBorder.none,
+                                    hintStyle: TextStyle(color: Colors.grey),
+                                  ),
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  maxLines: null,
+                                  autofocus: true,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                    onPressed: _cancelEdit,
+                                    child: const Text(
+                                      'Cancel',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: _submitEdit,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryColor,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    ),
+                                    child: const Text(
+                                      'Save',
+                                      style: TextStyle(color: Colors.white, fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                          child: Text(
+                            comment.content,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
                           ),
                         ),
-                      ),
                       const SizedBox(height: 12),
                       
                       // Actions row
@@ -498,6 +618,65 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                                 ),
                               ),
                             ),
+                            
+                            // Edit/Delete options for comment owner
+                            if (comment.userId == authState.value?.id) ...[
+                              const SizedBox(width: 16),
+                              
+                              // Edit button
+                              GestureDetector(
+                                onTap: () => _startEdit(comment),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.edit,
+                                        size: 18,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Edit',
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              
+                              const SizedBox(width: 16),
+                              
+                              // Delete button
+                              GestureDetector(
+                                onTap: () => _deleteComment(comment),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete,
+                                        size: 18,
+                                        color: Colors.red.shade400,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Delete',
+                                        style: TextStyle(
+                                          color: Colors.red.shade400,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -618,19 +797,82 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                 ),
                 const SizedBox(height: 6),
                 
-                // Comment text
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
-                  child: Text(
-                    comment.content,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      height: 1.3,
+                // Comment text or edit input
+                if (_editingCommentId == comment.id)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade900.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppTheme.primaryColor.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _editController,
+                            decoration: const InputDecoration(
+                              hintText: 'Edit your reply...',
+                              border: InputBorder.none,
+                              hintStyle: TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            maxLines: null,
+                            autofocus: true,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: _cancelEdit,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                              ),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(color: Colors.grey, fontSize: 11),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            ElevatedButton(
+                              onPressed: _submitEdit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                minimumSize: Size.zero,
+                              ),
+                              child: const Text(
+                                'Save',
+                                style: TextStyle(color: Colors.white, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+                    child: Text(
+                      comment.content,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
                     ),
                   ),
-                ),
                 const SizedBox(height: 8),
                 
                 // Actions row
@@ -700,6 +942,65 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                         ),
                       ),
                     ),
+                    
+                    // Edit/Delete options for comment owner
+                    if (comment.userId == authState.value?.id) ...[
+                      const SizedBox(width: 12),
+                      
+                      // Edit button
+                      GestureDetector(
+                        onTap: () => _startEdit(comment),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.edit,
+                                size: 16,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'Edit',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(width: 12),
+                      
+                      // Delete button
+                      GestureDetector(
+                        onTap: () => _deleteComment(comment),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete,
+                                size: 16,
+                                color: Colors.red.shade400,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Delete',
+                                style: TextStyle(
+                                  color: Colors.red.shade400,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 
