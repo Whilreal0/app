@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../features/home/models/comment.dart';
+import '../services/notification_service.dart';
 
 class CommentService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -8,7 +9,6 @@ class CommentService {
   // Fetch comments for a specific post
   Future<List<Comment>> fetchCommentsForPost(String postId, String currentUserId) async {
     try {
-      print('Fetching comments for post: $postId');
       
       // Fetch all comments for the post (without join)
       final response = await _supabase
@@ -16,9 +16,6 @@ class CommentService {
           .select('*')
           .eq('post_id', postId)
           .order('created_at', ascending: false);
-
-      print('Raw response from comments: $response');
-      print('Number of comments found: ${response.length}');
 
       if (response.isEmpty) return [];
 
@@ -46,11 +43,9 @@ class CommentService {
       final comments = <Comment>[];
       
       for (final commentData in response) {
-        print('Processing comment: $commentData');
         
         // Only process main comments (parent_comment_id is null)
         if (commentData['parent_comment_id'] == null) {
-          print('This is a main comment, processing...');
           
           final userProfile = userProfilesMap[commentData['user_id']];
           if (userProfile == null) {
@@ -58,7 +53,6 @@ class CommentService {
             continue;
           }
           
-          print('User profile for comment: $userProfile');
           
           final comment = Comment.fromMap({
             ...commentData,
@@ -77,13 +71,11 @@ class CommentService {
             isLikedByMe: isLiked,
           ));
           
-          print('Added comment: ${comment.username} - ${comment.content}');
         } else {
           print('Skipping reply comment with parent_id: ${commentData['parent_comment_id']}');
         }
       }
 
-      print('Final comments list length: ${comments.length}');
       return comments;
     } catch (e) {
       print('Error fetching comments: $e');
@@ -119,9 +111,6 @@ class CommentService {
           'username': userProfile['username'],
           'avatar_url': userProfile['avatar_url'] ?? '',
         }, nestingLevel: 1); // All replies are Level 1
-
-        print('Reply data: $replyData');
-        print('Reply likes count: ${reply.likesCount}');
 
         // Check if current user liked this reply
         final isLiked = await _checkIfCommentLiked(reply.id, currentUserId);
@@ -163,7 +152,6 @@ class CommentService {
     String? parentCommentId,
   }) async {
     try {
-      print('Adding comment - PostId: $postId, UserId: $userId, Content: $content, ParentId: $parentCommentId');
       
       // Get user profile for username and avatar
       final userProfile = await _supabase
@@ -172,8 +160,7 @@ class CommentService {
           .eq('id', userId)
           .single();
 
-      print('User profile: $userProfile');
-
+      
       final commentData = {
         'id': const Uuid().v4(),
         'post_id': postId,
@@ -183,7 +170,7 @@ class CommentService {
         'created_at': DateTime.now().toUtc().toIso8601String(),
       };
 
-      print('Comment data to insert: $commentData');
+      
 
       final response = await _supabase
           .from('comments')
@@ -191,11 +178,57 @@ class CommentService {
           .select()
           .single();
 
-      print('Comment inserted successfully: $response');
+      
 
       // Update post comment count
       await _updatePostCommentCount(postId, 1);
-      print('Updated post comment count');
+      
+
+      // --- Notification integration for replies ---
+      if (parentCommentId != null) {
+        // Get parent comment owner
+        final parentComment = await _supabase
+            .from('comments')
+            .select('user_id')
+            .eq('id', parentCommentId)
+            .single();
+        final parentCommentOwnerId = parentComment['user_id'];
+        if (parentCommentOwnerId != userId) {
+          await NotificationService().createCommentReplyNotification(
+            commentId: response['id'],
+            fromUserId: userId,
+            parentCommentOwnerId: parentCommentOwnerId,
+            // Do not set created_at here
+          );
+        }
+      }
+      // --- End notification integration ---
+
+      // --- Notification integration for comments on post ---
+      if (parentCommentId == null) {
+        // This is a top-level comment (not a reply)
+        // Get post owner
+        final post = await _supabase
+            .from('posts')
+            .select('user_id')
+            .eq('id', postId)
+            .single();
+        final postOwnerId = post['user_id'];
+        if (postOwnerId != userId) {
+          await _supabase.from('notifications').insert({
+            'user_id': postOwnerId,
+            'from_user_id': userId,
+            'type': 'post_comment',
+            'title': 'user commented on your post',
+            'message': 'Tap to view the comment',
+            'post_id': postId,
+            'comment_id': response['id'],
+            'is_read': false,
+            // 'created_at': DateTime.now().toIso8601String(), // Let DB set this
+          });
+        }
+      }
+      // --- End notification integration ---
 
       return Comment.fromMap({
         ...response,
@@ -212,7 +245,6 @@ class CommentService {
   // Like a comment
   Future<void> likeComment(String commentId, String userId) async {
     try {
-      print('Liking comment: $commentId by user: $userId');
       
       await _supabase
           .from('comment_likes')
@@ -222,11 +254,28 @@ class CommentService {
             'created_at': DateTime.now().toIso8601String(),
           });
 
-      print('Comment like inserted successfully');
+      
 
       // Update comment like count
       await _updateCommentLikeCount(commentId, 1);
-      print('Comment like count updated');
+      
+
+      // --- Notification integration ---
+      // Get comment owner
+      final comment = await _supabase
+          .from('comments')
+          .select('user_id')
+          .eq('id', commentId)
+          .single();
+      final commentOwnerId = comment['user_id'];
+      if (commentOwnerId != userId) {
+        await NotificationService().createCommentLikeNotification(
+          commentId: commentId,
+          fromUserId: userId,
+          commentOwnerId: commentOwnerId,
+        );
+      }
+      // --- End notification integration ---
     } catch (e) {
       print('Error liking comment: $e');
       rethrow;
@@ -236,7 +285,6 @@ class CommentService {
   // Unlike a comment
   Future<void> unlikeComment(String commentId, String userId) async {
     try {
-      print('Unliking comment: $commentId by user: $userId');
       
       await _supabase
           .from('comment_likes')
@@ -244,11 +292,11 @@ class CommentService {
           .eq('comment_id', commentId)
           .eq('user_id', userId);
 
-      print('Comment like deleted successfully');
+      
 
       // Update comment like count
       await _updateCommentLikeCount(commentId, -1);
-      print('Comment like count updated');
+      
     } catch (e) {
       print('Error unliking comment: $e');
       rethrow;
@@ -286,14 +334,12 @@ class CommentService {
   // Update comment like count
   Future<void> _updateCommentLikeCount(String commentId, int increment) async {
     try {
-      print('Updating comment like count for comment: $commentId, increment: $increment');
       
       await _supabase.rpc('update_comment_like_count', params: {
         'comment_id': commentId,
         'increment': increment,
       });
       
-      print('Comment like count updated successfully');
     } catch (e) {
       print('Error updating comment like count: $e');
       rethrow;

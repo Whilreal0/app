@@ -5,6 +5,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../providers/bottom_nav_provider.dart';
+import '../../core/providers/notification_provider.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
   final Widget child;
@@ -21,6 +22,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final userProfileAsync = ref.watch(userProfileProvider);
+    final unreadCountAsync = ref.watch(unreadNotificationCountProvider);
 
     return userProfileAsync.when(
       data: (profile) {
@@ -38,20 +40,25 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           bottomNavigationBar: BottomNavigationBar(
             currentIndex: selectedIndex,
             onTap: (index) {
-              // setState(() => _selectedIndex = index);
-              // context.go(navigationItems[index]['route'] as String);
-                  ref.read(bottomNavProvider.notifier).state = index;
-        context.go(navigationItems[index]['route'] as String);
+              ref.read(bottomNavProvider.notifier).state = index;
+              context.go(navigationItems[index]['route'] as String);
             },
             type: BottomNavigationBarType.fixed,
             backgroundColor: AppTheme.surfaceColor,
             selectedItemColor: AppTheme.primaryColor,
             unselectedItemColor: Colors.grey,
             items: navigationItems
-                .map((item) => BottomNavigationBarItem(
-                      icon: Icon(item['icon'] as IconData),
-                      label: item['label'] as String,
-                    ))
+                .asMap()
+                .entries
+                .map((entry) {
+                  final i = entry.key;
+                  final item = entry.value;
+                  // Remove notifications badge logic and item
+                  return BottomNavigationBarItem(
+                    icon: Icon(item['icon'] as IconData),
+                    label: item['label'] as String,
+                  );
+                })
                 .toList(),
           ),
         );
@@ -80,13 +87,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       {
         'icon': Icons.add,
         'label': 'Post',
-        'route': '/post', // Placeholder route, implement screen as needed
+        'route': '/post',
       },
       {
         'icon': Icons.search,
         'label': 'Search',
         'route': '/search',
       },
+      // Notifications item removed
       {
         'icon': Icons.settings,
         'label': 'Settings',

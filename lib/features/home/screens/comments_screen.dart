@@ -30,6 +30,7 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
   }
 
   void _startReply(Comment comment) {
+    if (!mounted) return;
     setState(() {
       // In Facebook-style, all replies go to the main comment (Level 0)
       if (comment.nestingLevel == 1) {
@@ -48,6 +49,7 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
   }
 
   void _cancelReply() {
+    if (!mounted) return;
     setState(() {
       _replyingToCommentId = null;
       _replyingToUsername = null;
@@ -63,6 +65,11 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
     _commentController.clear();
 
     await ref.read(commentsProvider(widget.postId).notifier).addComment(content);
+
+    if (!mounted) return;
+    setState(() {
+      // any state update after async
+    });
   }
 
   Future<void> _submitReply() async {

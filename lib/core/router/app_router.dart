@@ -12,6 +12,8 @@ import '../../features/search/screens/search_screen.dart';
 import '../../features/post/screens/post_screen.dart';
 import '../../features/home/screens/comments_screen.dart';
 import '../../shared/widgets/main_layout.dart';
+import '../../features/notifications/screens/notification_center_screen.dart';
+import '../../features/post/screens/post_details_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -71,6 +73,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/post',
             builder: (context, state) => const PostScreen(),
+          ),
+          GoRoute(
+            path: '/post/:postId',
+            builder: (context, state) {
+              final postId = state.pathParameters['postId']!;
+              return PostDetailsScreen(postId: postId);
+            },
+          ),
+          GoRoute(
+            path: '/notifications',
+            builder: (context, state) => const NotificationCenterScreen(),
           ),
         ],
       ),

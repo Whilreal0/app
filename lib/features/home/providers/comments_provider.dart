@@ -35,13 +35,13 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
     }
     
     try {
-      print('Loading comments for post: $postId, user: $userId');
+      
       state = const AsyncValue.loading();
       final comments = await CommentService().fetchCommentsForPost(postId, userId!);
-      print('Comments loaded: ${comments.length}');
+      
       state = AsyncValue.data(comments);
     } catch (e) {
-      print('Error loading comments: $e');
+      
       state = AsyncValue.error(e, StackTrace.current);
     }
   }
