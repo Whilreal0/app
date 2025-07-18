@@ -22,7 +22,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final userProfileAsync = ref.watch(userProfileProvider);
-    final unreadCountAsync = ref.watch(unreadNotificationCountProvider);
+    final unreadCountAsync = ref.watch(currentUserUnreadCountProvider);
 
     return userProfileAsync.when(
       data: (profile) {

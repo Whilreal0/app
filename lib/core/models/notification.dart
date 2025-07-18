@@ -60,7 +60,9 @@ class Notification {
       postId: map['post_id'],
       commentId: map['comment_id'],
       isRead: map['is_read'] ?? false,
-      createdAt: DateTime.parse(map['created_at']).toLocal(),
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at']).toLocal()
+          : DateTime.now(),
     );
   }
 

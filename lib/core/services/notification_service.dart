@@ -5,7 +5,7 @@ class NotificationService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   // Fetch notifications for a user
-  Future<List<Notification>> fetchNotifications(String userId, {int limit = 50}) async {
+  Future<List<Notification>> fetchNotifications(String userId, {int limit = 1000}) async {
     try {
       print('Fetching notifications for user: $userId');
       
@@ -28,6 +28,7 @@ class NotificationService {
       final notifications = <Notification>[];
       
       for (final notificationData in response) {
+        print('Raw notification data: $notificationData');
         final fromUser = notificationData['from_user'] as Map<String, dynamic>?;
         
         final notification = Notification.fromMap({
@@ -36,6 +37,7 @@ class NotificationService {
           'from_avatar_url': fromUser?['avatar_url'],
         });
 
+        print('Notification ${notification.id}: is_read=${notification.isRead}');
         notifications.add(notification);
       }
 
@@ -50,13 +52,50 @@ class NotificationService {
   // Get unread notification count
   Future<int> getUnreadCount(String userId) async {
     try {
+      // Try the RPC function first
       final response = await _supabase.rpc('get_unread_notification_count', params: {
         'user_uuid': userId,
       });
 
-      return response ?? 0;
+      if (response != null) {
+        print('getUnreadCount RPC result: $response');
+        return response;
+      }
     } catch (e) {
-      print('Error getting unread count: $e');
+      print('RPC getUnreadCount failed, using direct query: $e');
+    }
+
+    // Fallback: direct database query
+    try {
+      print('getUnreadCount - querying for user: $userId');
+      
+      // First, let's see all notifications for this user
+      final allNotifications = await _supabase
+          .from('notifications')
+          .select('id, is_read')
+          .eq('user_id', userId);
+      
+      print('getUnreadCount - all notifications: ${allNotifications.length}');
+      for (final notification in allNotifications) {
+        print('getUnreadCount - notification ${notification['id']}: is_read=${notification['is_read']}');
+      }
+      
+      // Now get unread notifications
+      final response = await _supabase
+          .from('notifications')
+          .select('id, is_read')
+          .eq('user_id', userId)
+          .eq('is_read', false);
+
+      final count = response.length;
+      print('getUnreadCount direct query result: $count');
+      print('getUnreadCount - unread notifications:');
+      for (final notification in response) {
+        print('getUnreadCount - unread notification ${notification['id']}: is_read=${notification['is_read']}');
+      }
+      return count;
+    } catch (e) {
+      print('Error getting unread count with direct query: $e');
       return 0;
     }
   }
@@ -200,6 +239,24 @@ class NotificationService {
       );
     } catch (e) {
       print('Error creating comment reply notification: $e');
+    }
+  }
+
+  // Delete a notification by ID
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      await _supabase.from('notifications').delete().eq('id', notificationId);
+    } catch (e) {
+      // Optionally handle error
+    }
+  }
+
+  // Restore a notification (for undo)
+  Future<void> restoreNotification(Notification notification) async {
+    try {
+      await _supabase.from('notifications').insert(notification.toMap());
+    } catch (e) {
+      // Optionally handle error
     }
   }
 
