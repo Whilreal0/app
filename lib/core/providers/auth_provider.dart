@@ -29,6 +29,19 @@ final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref
   return AuthNotifier(authService);
 });
 
+final userIdProvider = Provider<String>((ref) {
+  final authState = ref.watch(authStateProvider);
+  
+  return authState.when(
+    data: (user) {
+      if (user == null) throw Exception('User not logged in');
+      return user.id;
+    },
+    loading: () => throw Exception('User not logged in'),
+    error: (_, __) => throw Exception('User not logged in'),
+  );
+});
+
 class AuthState {
   final bool isLoading;
   final String? error;

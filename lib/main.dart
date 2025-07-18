@@ -14,7 +14,8 @@ void main() async {
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
   );
-
+  // Force logout on every hot restart
+  await Supabase.instance.client.auth.signOut();
   runApp(const ProviderScope(child: MyApp()));
 }
 

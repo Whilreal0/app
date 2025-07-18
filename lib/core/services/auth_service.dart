@@ -23,7 +23,7 @@ class AuthService {
   }
 
   Future<void> signUp(String email, String password, String fullname, String username) async {
-    final response = await _supabase.auth.signUp(
+    final response = await Supabase.instance.client.auth.signUp(
       email: email,
       password: password,
       data: {
@@ -32,9 +32,18 @@ class AuthService {
       },
     );
 
-    if (response.user == null) {
+    final user = response.user;
+    if (user == null) {
       throw Exception('Sign up failed');
     }
+
+    await Supabase.instance.client
+        .from('profiles')
+        .update({
+          'fullname': fullname,
+          'username': username,
+        })
+        .eq('id', user.id);
   }
 
   Future<void> signOut() async {
@@ -45,7 +54,7 @@ class AuthService {
     try {
       final response = await _supabase
           .from('profiles')
-          .select('id, email, role, created_at, fullname, username')
+          .select('id, email, role, created_at, fullname, username, avatar_url')
           .eq('id', userId)
           .single();
 

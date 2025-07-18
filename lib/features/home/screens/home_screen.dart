@@ -1,25 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/post.dart'; // adjust the import path as needed
+import '../../../core/services/post_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/posts_provider.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
-      body: FutureBuilder<List<Post>>(
-        future: fetchPosts(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final posts = snapshot.data ?? [];
-          return ListView.builder(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final posts = ref.watch(currentUserPostsProvider);
+    final authState = ref.watch(authStateProvider);
+
+    return authState.when(
+      data: (user) {
+        if (user == null) {
+          return Scaffold(
+            body: Center(child: Text('Please log in')),
+          );
+        }
+
+        if (posts.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Home')),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(title: const Text('Home')),
+          body: ListView.builder(
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
@@ -36,8 +49,14 @@ class HomeScreen extends StatelessWidget {
                       child: Row(
                         children: [
                           CircleAvatar(
-                            backgroundImage: NetworkImage(post.avatarUrl),
+                            backgroundImage: post.avatarUrl != null && post.avatarUrl.isNotEmpty
+                                ? NetworkImage(post.avatarUrl)
+                                : null,
+                            backgroundColor: Colors.grey,
                             radius: 20,
+                            child: (post.avatarUrl == null || post.avatarUrl.isEmpty)
+                                ? Icon(Icons.person)
+                                : null,
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -92,12 +111,24 @@ class HomeScreen extends StatelessWidget {
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.favorite_border),
-                            onPressed: () {},
+                            icon: Icon(
+                              post.isLikedByMe ? Icons.favorite : Icons.favorite_border,
+                              color: post.isLikedByMe ? Colors.red : null,
+                            ),
+                            onPressed: () {
+                              if (post.isLikedByMe) {
+                                ref.read(postsProvider(user.id).notifier).unlikePost(post);
+                              } else {
+                                ref.read(postsProvider(user.id).notifier).likePost(post);
+                              }
+                            },
                           ),
                           IconButton(
                             icon: const Icon(Icons.mode_comment_outlined),
-                            onPressed: () {},
+                            onPressed: () {
+                              // Navigate to comments screen
+                              context.push('/comments/${post.id}');
+                            },
                           ),
                           IconButton(
                             icon: const Icon(Icons.send_outlined),
@@ -111,12 +142,31 @@ class HomeScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Likes summary
+                    // Likes and comments summary
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                      child: Text(
-                        'Liked by ${post.likesCount} others',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Liked by ${post.likesCount} others',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          if (post.commentsCount > 0)
+                            GestureDetector(
+                              onTap: () {
+                                // Navigate to comments screen
+                                context.push('/comments/${post.id}');
+                              },
+                              child: Text(
+                                'View all ${post.commentsCount} comments',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -124,8 +174,16 @@ class HomeScreen extends StatelessWidget {
                 ),
               );
             },
-          );
-        },
+          ),
+        );
+      },
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Home')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        appBar: AppBar(title: const Text('Home')),
+        body: Center(child: Text('Error: $error')),
       ),
     );
   }

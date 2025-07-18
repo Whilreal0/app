@@ -5,6 +5,7 @@ class UserProfile {
   final DateTime createdAt;
   final String? fullName;
   final String? username;
+  final String? avatarUrl;
 
   UserProfile({
     required this.id,
@@ -13,6 +14,7 @@ class UserProfile {
     required this.createdAt,
     this.fullName,
     this.username,
+    this.avatarUrl,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class UserProfile {
       createdAt: DateTime.parse(json['created_at'] as String),
       fullName: json['fullname'] as String?,
       username: json['username'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
     );
   }
 
@@ -34,6 +37,7 @@ class UserProfile {
       'created_at': createdAt.toIso8601String(),
       if (fullName != null) 'fullname': fullName,
       if (username != null) 'username': username,
+      if (avatarUrl != null) 'avatar_url': avatarUrl,
     };
   }
 
@@ -44,6 +48,7 @@ class UserProfile {
     DateTime? createdAt,
     String? fullName,
     String? username,
+    String? avatarUrl,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -52,6 +57,7 @@ class UserProfile {
       createdAt: createdAt ?? this.createdAt,
       fullName: fullName ?? this.fullName,
       username: username ?? this.username,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 

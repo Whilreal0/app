@@ -5,15 +5,20 @@ import '../../../core/services/post_service.dart';
 import '../../home/models/post.dart';
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../home/providers/posts_provider.dart';
+import 'package:go_router/go_router.dart';
+import '../../../shared/providers/bottom_nav_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 
-class PostScreen extends StatefulWidget {
+class PostScreen extends ConsumerStatefulWidget {
   const PostScreen({Key? key}) : super(key: key);
 
   @override
-  State<PostScreen> createState() => _PostScreenState();
+  ConsumerState<PostScreen> createState() => _PostScreenState();
 }
 
-class _PostScreenState extends State<PostScreen> {
+class _PostScreenState extends ConsumerState<PostScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _captionController = TextEditingController();
   File? _imageFile;
@@ -33,12 +38,12 @@ class _PostScreenState extends State<PostScreen> {
     final fileName = const Uuid().v4();
     final filePath = 'posts/$fileName.jpg';
     try {
-      final String uploadedPath = await storage.from('post-images').upload(filePath, image);
+      final uploadedPath = await storage.from('post-images').upload(filePath, image);
       // If upload is successful, get the public URL
       final publicUrl = storage.from('post-images').getPublicUrl(filePath);
       return publicUrl;
     } catch (e) {
-      // If upload fails, return null
+      print('Upload error: $e');
       return null;
     }
   }
@@ -76,15 +81,32 @@ class _PostScreenState extends State<PostScreen> {
       imageUrl: imageUrl ?? '',
       caption: _captionController.text,
       likesCount: 0,
+      commentsCount: 0,
       createdAt: DateTime.now(),
+      isLikedByMe: false, // New post is not liked by the user
     );
     try {
       await PostService().addPost(post);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post added!')));
+
+      // Refresh the posts provider to include the new post
+      ref.invalidate(postsProvider(user.id));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post added!')),
+      );
+
       _captionController.clear();
       setState(() { _imageFile = null; });
+
+      // Schedule navigation for the next frame (most robust)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(bottomNavProvider.notifier).state = 0; // Set index to home
+        context.go('/home'); // Always go to home
+      });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error:  ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error:  ${e.toString()}')),
+      );
     } finally {
       setState(() { _isLoading = false; });
     }
@@ -94,7 +116,7 @@ class _PostScreenState extends State<PostScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Post')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
