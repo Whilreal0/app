@@ -6,6 +6,7 @@ class Post {
   final String imageUrl;
   final String caption;
   final int likesCount;
+  final int commentsCount;
   final DateTime createdAt;
   final bool isLikedByMe;
 
@@ -17,6 +18,7 @@ class Post {
     required this.imageUrl,
     required this.caption,
     required this.likesCount,
+    required this.commentsCount,
     required this.createdAt,
     required this.isLikedByMe,
   });
@@ -30,6 +32,7 @@ class Post {
       imageUrl: map['image_url'],
       caption: map['caption'] ?? '',
       likesCount: map['likes_count'] ?? 0,
+      commentsCount: map['comments_count'] ?? 0,
       createdAt: DateTime.parse(map['created_at']),
       isLikedByMe: false, // Always false from DB!
     );
@@ -44,6 +47,7 @@ class Post {
       'image_url': imageUrl,
       'caption': caption,
       'likes_count': likesCount,
+      'comments_count': commentsCount,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -56,6 +60,7 @@ class Post {
     String? imageUrl,
     String? caption,
     int? likesCount,
+    int? commentsCount,
     DateTime? createdAt,
     bool? isLikedByMe,
   }) {
@@ -67,6 +72,7 @@ class Post {
       imageUrl: imageUrl ?? this.imageUrl,
       caption: caption ?? this.caption,
       likesCount: likesCount ?? this.likesCount,
+      commentsCount: commentsCount ?? this.commentsCount,
       createdAt: createdAt ?? this.createdAt,
       isLikedByMe: isLikedByMe ?? this.isLikedByMe,
     );

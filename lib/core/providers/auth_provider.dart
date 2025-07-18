@@ -30,9 +30,16 @@ final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref
 });
 
 final userIdProvider = Provider<String>((ref) {
-  final user = Supabase.instance.client.auth.currentUser;
-  if (user == null) throw Exception('User not logged in');
-  return user.id;
+  final authState = ref.watch(authStateProvider);
+  
+  return authState.when(
+    data: (user) {
+      if (user == null) throw Exception('User not logged in');
+      return user.id;
+    },
+    loading: () => throw Exception('User not logged in'),
+    error: (_, __) => throw Exception('User not logged in'),
+  );
 });
 
 class AuthState {

@@ -11,10 +11,10 @@ class PostService {
   }
 
   Future<List<Post>> fetchPostsWithLikeState(String userId) async {
-    // 1. Fetch all posts
+    // 1. Fetch all posts with comment counts
     final postsResponse = await _supabase
         .from('posts')
-        .select()
+        .select('*, comments_count')
         .order('created_at', ascending: false);
 
     final posts = (postsResponse as List)

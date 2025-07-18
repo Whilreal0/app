@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../home/providers/posts_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/providers/bottom_nav_provider.dart';
-
+import '../../../core/providers/auth_provider.dart';
 
 class PostScreen extends ConsumerStatefulWidget {
   const PostScreen({Key? key}) : super(key: key);
@@ -81,11 +81,15 @@ class _PostScreenState extends ConsumerState<PostScreen> {
       imageUrl: imageUrl ?? '',
       caption: _captionController.text,
       likesCount: 0,
+      commentsCount: 0,
       createdAt: DateTime.now(),
       isLikedByMe: false, // New post is not liked by the user
     );
     try {
       await PostService().addPost(post);
+
+      // Refresh the posts provider to include the new post
+      ref.invalidate(postsProvider(user.id));
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Post added!')),
@@ -96,9 +100,9 @@ class _PostScreenState extends ConsumerState<PostScreen> {
 
       // Schedule navigation for the next frame (most robust)
       WidgetsBinding.instance.addPostFrameCallback((_) {
-  ref.read(bottomNavProvider.notifier).state = 0; // Set index to home
-  context.go('/home'); // Always go to home
-});
+        ref.read(bottomNavProvider.notifier).state = 0; // Set index to home
+        context.go('/home'); // Always go to home
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error:  ${e.toString()}')),

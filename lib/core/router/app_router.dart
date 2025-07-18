@@ -10,6 +10,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/post/screens/post_screen.dart';
+import '../../features/home/screens/comments_screen.dart';
 import '../../shared/widgets/main_layout.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -72,6 +73,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const PostScreen(),
           ),
         ],
+      ),
+      // Comments route (outside ShellRoute so it has its own AppBar)
+      GoRoute(
+        path: '/comments/:postId',
+        builder: (context, state) {
+          final postId = state.pathParameters['postId']!;
+          return CommentsScreen(postId: postId);
+        },
       ),
     ],
   );
