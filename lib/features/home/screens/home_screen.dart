@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/posts_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../shared/widgets/notification_bell_icon.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -25,13 +26,13 @@ class HomeScreen extends ConsumerWidget {
 
         if (posts.isEmpty) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Home')),
+            appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
             body: const Center(child: CircularProgressIndicator()),
           );
         }
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Home')),
+          appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
           body: ListView.builder(
             itemCount: posts.length,
             itemBuilder: (context, index) {
@@ -178,11 +179,11 @@ class HomeScreen extends ConsumerWidget {
         );
       },
       loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Home')),
+        appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
         body: const Center(child: CircularProgressIndicator()),
       ),
       error: (error, stack) => Scaffold(
-        appBar: AppBar(title: const Text('Home')),
+        appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
         body: Center(child: Text('Error: $error')),
       ),
     );

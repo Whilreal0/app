@@ -34,8 +34,8 @@ final userIdProvider = Provider<String>((ref) {
   
   return authState.when(
     data: (user) {
-      if (user == null) throw Exception('User not logged in');
-      return user.id;
+  if (user == null) throw Exception('User not logged in');
+  return user.id;
     },
     loading: () => throw Exception('User not logged in'),
     error: (_, __) => throw Exception('User not logged in'),

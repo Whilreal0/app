@@ -43,10 +43,30 @@ class PostService {
         'post_id': postId,
         'user_id': userId,
       });
+
+      // --- Notification integration for post like ---
+      // Fetch the post to get the owner
+      final post = await _supabase
+          .from('posts')
+          .select('user_id')
+          .eq('id', postId)
+          .single();
+      final postOwnerId = post['user_id'];
+      if (postOwnerId != userId) {
+        await _supabase.from('notifications').insert({
+          'user_id': postOwnerId,
+          'from_user_id': userId,
+          'type': 'post_like',
+          'title': 'user liked your post',
+          'message': 'Tap to view the post',
+          'post_id': postId,
+          'is_read': false,
+          // 'created_at': DateTime.now().toIso8601String(), // Let DB set this
+        });
+      }
+      // --- End notification integration ---
     } on PostgrestException catch (e) {
-      if (e.code == '23505') { // Unique violation
-        // Already liked, ignore or log
-        print('User already liked this post.');
+      if (e.code == '23505') {
       } else {
         rethrow;
       }

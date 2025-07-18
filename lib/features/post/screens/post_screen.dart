@@ -43,7 +43,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
       final publicUrl = storage.from('post-images').getPublicUrl(filePath);
       return publicUrl;
     } catch (e) {
-      print('Upload error: $e');
+      
       return null;
     }
   }

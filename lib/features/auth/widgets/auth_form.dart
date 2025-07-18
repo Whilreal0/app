@@ -47,14 +47,14 @@ class _AuthFormState extends ConsumerState<AuthForm> {
 
         String email = input;
         if (!input.contains('@')) {
-          print('Looking up email for username: "$input"');
+          
           final response = await Supabase.instance.client
               .from('profiles')
               .select('email')
               .ilike('username', input) // case-insensitive
               .maybeSingle();
 
-          print('Lookup result: $response');
+          
 
           if (response == null) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -65,7 +65,7 @@ class _AuthFormState extends ConsumerState<AuthForm> {
           email = response['email'] as String;
         }
 
-        print('Attempting login with email: "$email" and password: "$password"');
+        
         authNotifier.signIn(email, password);
       }
     }
