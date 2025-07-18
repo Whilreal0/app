@@ -263,28 +263,51 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.surfaceColor,
                 border: Border(
-                  top: BorderSide(color: Colors.grey.shade800),
+                  top: BorderSide(color: Colors.grey.shade800.withOpacity(0.5)),
                 ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      decoration: const InputDecoration(
-                        hintText: 'Add a comment...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(color: Colors.grey),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade900.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: Colors.grey.shade800.withOpacity(0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _commentController,
+                        decoration: const InputDecoration(
+                          hintText: 'Add a comment...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(color: Colors.grey),
+                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        maxLines: null,
                       ),
-                      style: const TextStyle(color: Colors.white),
-                      maxLines: null,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: AppTheme.primaryColor),
-                    onPressed: _submitComment,
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _submitComment,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.send,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -334,174 +357,175 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                 ),
                 const SizedBox(width: 12),
               
-              // Comment content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Username and timestamp
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            comment.username,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              fontSize: 14,
+                // Comment content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Username and timestamp
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              comment.username,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
-                        ),
-                        Row(
-                          children: [
-                            if (comment.isPosting) ...[
-                              const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                          Row(
+                            children: [
+                              if (comment.isPosting) ...[
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                _formatTimestamp(comment.createdAt, isPosting: comment.isPosting),
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
                                 ),
                               ),
-                              const SizedBox(width: 6),
                             ],
-                            Text(
-                              _formatTimestamp(comment.createdAt, isPosting: comment.isPosting),
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w400,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      
+                      // Comment text
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                        child: Text(
+                          comment.content,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Actions row
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade900.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Like button
+                            GestureDetector(
+                              onTap: () {
+                                if (comment.isLikedByMe) {
+                                  ref.read(commentsProvider(widget.postId).notifier)
+                                      .unlikeComment(comment.id);
+                                } else {
+                                  ref.read(commentsProvider(widget.postId).notifier)
+                                      .likeComment(comment.id);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      comment.isLikedByMe
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      size: 18,
+                                      color: comment.isLikedByMe ? Colors.red.shade400 : Colors.grey.shade400,
+                                    ),
+                                    if (comment.likesCount > 0) ...[
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '${comment.likesCount}',
+                                        style: TextStyle(
+                                          color: comment.isLikedByMe ? Colors.red.shade400 : Colors.grey.shade400,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    // Comment text
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-                      child: Text(
-                        comment.content,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Actions row
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade900.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Like button
-                          GestureDetector(
-                            onTap: () {
-                              if (comment.isLikedByMe) {
-                                ref.read(commentsProvider(widget.postId).notifier)
-                                    .unlikeComment(comment.id);
-                              } else {
-                                ref.read(commentsProvider(widget.postId).notifier)
-                                    .likeComment(comment.id);
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    comment.isLikedByMe
-                                        ? Icons.favorite
-                                        : Icons.favorite_border,
-                                    size: 18,
-                                    color: comment.isLikedByMe ? Colors.red.shade400 : Colors.grey.shade400,
-                                  ),
-                                  if (comment.likesCount > 0) ...[
+                            const SizedBox(width: 16),
+                            
+                            // Reply button
+                            GestureDetector(
+                              onTap: () => _startReply(comment),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.reply,
+                                      size: 18,
+                                      color: Colors.grey.shade400,
+                                    ),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      '${comment.likesCount}',
+                                    const Text(
+                                      'Reply',
                                       style: TextStyle(
-                                        color: comment.isLikedByMe ? Colors.red.shade400 : Colors.grey.shade400,
+                                        color: Colors.grey,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          
-                          // Reply button
-                          GestureDetector(
-                            onTap: () => _startReply(comment),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.reply,
-                                    size: 18,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  const Text(
-                                    'Reply',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        
-        // Replies (Facebook-style - only Level 1)
-        if (comment.replies.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.only(top: 12, left: 44),
-            child: Column(
-              children: comment.replies.map((reply) => _buildNestedCommentWidget(reply)).toList(),
-            ),
-          ),
-        
-        // Divider with better styling
-        Container(
-          margin: const EdgeInsets.only(top: 16),
-          height: 1,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.transparent,
-                Colors.grey.shade800.withOpacity(0.3),
-                Colors.transparent,
               ],
             ),
           ),
-        ),
-      ],
+          
+          // Replies (Facebook-style - only Level 1)
+          if (comment.replies.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 12, left: 44),
+              child: Column(
+                children: comment.replies.map((reply) => _buildNestedCommentWidget(reply)).toList(),
+              ),
+            ),
+          
+          // Divider with better styling
+          Container(
+            margin: const EdgeInsets.only(top: 16),
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.grey.shade800.withOpacity(0.3),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
