@@ -14,6 +14,7 @@ import '../../features/profile/screens/profile_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/screens/notification_settings_screen.dart';
+import '../../features/settings/screens/reported_posts_screen.dart';
 import '../../features/users/screens/users_screen.dart';
 import '../../shared/widgets/main_layout.dart';
 
@@ -69,6 +70,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings/notifications',
             builder: (context, state) => const NotificationSettingsScreen(),
+          ),
+          GoRoute(
+            path: '/reported-posts',
+            builder: (context, state) => const ReportedPostsScreen(),
           ),
 
           GoRoute(

@@ -14,30 +14,20 @@ class NotificationService {
     try {
       final response = await _supabase
           .from('notifications')
-          .select('''
-            *,
-            from_user:from_user_id(
-              id,
-              username,
-              avatar_url
-            )
-          ''')
+          .select('*')
           .eq('user_id', userId)
           .order('created_at', ascending: false)
           .limit(limit);
-
+      
       final notifications = <Notification>[];
       
       for (final notificationData in response) {
-        final fromUser = notificationData['from_user'] as Map<String, dynamic>?;
-        
-        final notification = Notification.fromMap({
-          ...notificationData,
-          'from_username': fromUser?['username'],
-          'from_avatar_url': fromUser?['avatar_url'],
-        });
-
-        notifications.add(notification);
+        try {
+          final notification = Notification.fromMap(notificationData);
+          notifications.add(notification);
+        } catch (e) {
+          // Continue with other notifications
+        }
       }
       
       return notifications;
@@ -49,27 +39,15 @@ class NotificationService {
   // Get unread notification count
   Future<int> getUnreadCount(String userId) async {
     try {
-      // Try the RPC function first
-      final response = await _supabase.rpc('get_unread_notification_count', params: {
-        'user_uuid': userId,
-      });
-
-      if (response != null) {
-        return response;
-      }
-    } catch (e) {
-      // Fallback to direct query
-    }
-
-    // Fallback: direct database query
-    try {
+      // Direct database query
       final response = await _supabase
           .from('notifications')
-          .select('id, is_read')
+          .select('id')
           .eq('user_id', userId)
           .eq('is_read', false);
 
-      return response.length;
+      final count = response.length;
+      return count;
     } catch (e) {
       return 0;
     }
@@ -79,15 +57,32 @@ class NotificationService {
   Future<void> markAsRead(String userId, {List<String>? notificationIds}) async {
     try {
       if (notificationIds != null) {
-        await _supabase.rpc('mark_notifications_as_read', params: {
-          'user_uuid': userId,
-          'notification_ids': notificationIds,
-        });
+        // Mark specific notifications as read
+        await _supabase
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('user_id', userId)
+            .inFilter('id', notificationIds);
       } else {
-        await _supabase.rpc('mark_notifications_as_read', params: {
-          'user_uuid': userId,
-        });
+        // Mark all notifications as read
+        await _supabase
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('user_id', userId)
+            .eq('is_read', false);
       }
+    } catch (e) {
+      // Handle error silently
+    }
+  }
+
+  // Delete all notifications for a user
+  Future<void> deleteAllNotifications(String userId) async {
+    try {
+      await _supabase
+          .from('notifications')
+          .delete()
+          .eq('user_id', userId);
     } catch (e) {
       // Handle error silently
     }
@@ -105,6 +100,7 @@ class NotificationService {
     VoidCallback? onCreated, // Callback for immediate UI update
   }) async {
     try {
+      
       final notificationData = {
         'user_id': userId,
         'from_user_id': fromUserId,
@@ -113,21 +109,70 @@ class NotificationService {
         'message': message,
         'post_id': postId,
         'comment_id': commentId,
-        'is_read': false, // Changed from 'read' to 'is_read'
-        'created_at': DateTime.now().toIso8601String(),
+        'is_read': false,
+        // Remove created_at to let database set it automatically
       };
 
-      final result = await _supabase
-          .from('notifications')
-          .insert(notificationData)
-          .select()
-          .single();
+      try {
+        // Try direct insert first
+        final result = await _supabase
+            .from('notifications')
+            .insert(notificationData)
+            .select()
+            .single();
+      } catch (e) {
+        // Fallback: Use the safe function with elevated privileges
+        final result = await _supabase.rpc('create_notification_safe', params: {
+          'p_user_id': userId,
+          'p_from_user_id': fromUserId,
+          'p_type': type.value,
+          'p_title': title,
+          'p_message': message,
+          'p_post_id': postId,
+          'p_comment_id': commentId,
+        });
+      }
 
       // Trigger real-time update for the user
       try {
-        // Import the NotificationManager to trigger real-time updates
-        // This will update the bell icon immediately
+        // Immediate update
         NotificationManager.notifyUpdate(userId);
+        
+        // Multiple updates with delays to ensure UI catches the update
+        Future.microtask(() {
+          try {
+            NotificationManager.notifyUpdate(userId);
+          } catch (e) {
+            // Handle error silently
+          }
+        });
+        
+        // Update after 100ms
+        Future.delayed(const Duration(milliseconds: 100), () {
+          try {
+            NotificationManager.notifyUpdate(userId);
+          } catch (e) {
+            // Handle error silently
+          }
+        });
+        
+        // Update after 500ms
+        Future.delayed(const Duration(milliseconds: 500), () {
+          try {
+            NotificationManager.notifyUpdate(userId);
+          } catch (e) {
+            // Handle error silently
+          }
+        });
+        
+        // Update after 1 second
+        Future.delayed(const Duration(seconds: 1), () {
+          try {
+            NotificationManager.notifyUpdate(userId);
+          } catch (e) {
+            // Handle error silently
+          }
+        });
       } catch (e) {
         // Handle error silently
       }
@@ -155,7 +200,8 @@ class NotificationService {
       onCreated?.call();
 
     } catch (e) {
-      // Handle error silently
+      // Re-throw the error for better debugging
+      rethrow;
     }
   }
 
@@ -430,4 +476,6 @@ class NotificationService {
       // Handle error silently
     }
   }
+
+
 } 

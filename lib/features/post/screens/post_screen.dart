@@ -22,6 +22,7 @@ class PostScreen extends ConsumerStatefulWidget {
 }
 
 class _PostScreenState extends ConsumerState<PostScreen> {
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _captionController = TextEditingController();
   final StorageService _storageService = StorageService();
@@ -51,10 +52,11 @@ class _PostScreenState extends ConsumerState<PostScreen> {
             
             if (fileSize > maxSize) {
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                _scaffoldMessengerKey.currentState?.showSnackBar(
                   const SnackBar(
                     content: Text('Image too large. Please select an image smaller than 10MB.'),
                     backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
                   ),
                 );
               }
@@ -68,10 +70,11 @@ class _PostScreenState extends ConsumerState<PostScreen> {
             });
           } catch (e) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              _scaffoldMessengerKey.currentState?.showSnackBar(
                 SnackBar(
                   content: Text('Error processing image: $e'),
                   backgroundColor: Colors.red,
+                  duration: Duration(seconds: 2),
                 ),
               );
             }
@@ -118,10 +121,11 @@ class _PostScreenState extends ConsumerState<PostScreen> {
           
           if (fileSize > maxSize) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              _scaffoldMessengerKey.currentState?.showSnackBar(
                 const SnackBar(
                   content: Text('Image too large. Please select an image smaller than 10MB.'),
                   backgroundColor: Colors.red,
+                  duration: Duration(seconds: 2),
                 ),
               );
             }
@@ -135,7 +139,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('Error selecting image: $e'),
             backgroundColor: Colors.red,
@@ -161,15 +165,6 @@ class _PostScreenState extends ConsumerState<PostScreen> {
     
     String? imageUrl;
     if (_imageFile != null || _imageBytes != null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Uploading image...'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
       if (kIsWeb && _imageBytes != null) {
         imageUrl = await _uploadImage(_imageBytes!);
       } else if (_imageFile != null) {
@@ -178,21 +173,26 @@ class _PostScreenState extends ConsumerState<PostScreen> {
       
       if (imageUrl == null) {
         setState(() { _isLoading = false; });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image upload failed. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('Image upload failed. Please try again.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
         return;
       }
     }
 
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not logged in')));
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('User not logged in'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
       setState(() { _isLoading = false; });
       return;
     }
@@ -212,16 +212,27 @@ class _PostScreenState extends ConsumerState<PostScreen> {
       caption: _captionController.text,
       likesCount: 0,
       commentsCount: 0,
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now(), // This will be overridden by database
       isLikedByMe: false,
     );
 
     try {
-      await PostService().addPost(post);
+      print('DEBUG: Starting post creation...');
+      final createdPost = await PostService().addPost(post);
+      print('DEBUG: Post created successfully: ${createdPost.id}');
+      
+      // Invalidate both the specific user's posts and the current user posts provider
       ref.invalidate(postsProvider(user.id));
+      ref.invalidate(currentUserPostsProvider);
+      print('DEBUG: Providers invalidated');
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Post added!')),
+      // Show success snackbar
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('Post added'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 1),
+        ),
       );
 
       _captionController.clear();
@@ -231,13 +242,20 @@ class _PostScreenState extends ConsumerState<PostScreen> {
         _imageFileName = null;
       });
 
+      // Add delay so user can see the snackbar before navigation
+      await Future.delayed(const Duration(milliseconds: 800));
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(bottomNavProvider.notifier).state = 0;
         context.go('/home');
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Error creating post: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
       );
     } finally {
       setState(() { _isLoading = false; });
@@ -246,42 +264,198 @@ class _PostScreenState extends ConsumerState<PostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add Post')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _captionController,
-                decoration: const InputDecoration(labelText: 'Caption'),
-                validator: (value) {
-                  if ((_imageFile == null) && (value == null || value.isEmpty)) {
-                    return 'Enter a caption or pick an image';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _imageFile != null
-                  ? Image.file(_imageFile!, height: 200)
-                  : _imageBytes != null
-                      ? Image.memory(_imageBytes!, height: 200)
-                      : const SizedBox(height: 200, child: Center(child: Text('No image selected'))),
-              TextButton.icon(
-                icon: const Icon(Icons.image),
-                label: Text(kIsWeb ? 'Select Image' : 'Pick Image'),
-                onPressed: _pickImage,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
-                child: _isLoading ? const CircularProgressIndicator() : const Text('Add Post'),
-              ),
-            ],
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1A1A1A),
+        appBar: AppBar(
+          title: const Text(
+            'Create Post',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          backgroundColor: const Color(0xFF232A36),
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          actions: [
+            TextButton(
+              onPressed: _isLoading ? null : _submit,
+              child: _isLoading 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text(
+                    'Post',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+            ),
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Status update bar
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A2A),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.grey[800]!),
+                  ),
+                  child: Row(
+                    children: [
+                      // User avatar
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.grey[700],
+                        child: const Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      
+                      // Text input field
+                      Expanded(
+                        child: TextFormField(
+                          controller: _captionController,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Post a status update',
+                            hintStyle: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          validator: (value) {
+                            if ((_imageFile == null) && (value == null || value.isEmpty)) {
+                              return 'Enter a caption or pick an image';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      
+                      // Image attachment icon
+                      IconButton(
+                        onPressed: _pickImage,
+                        icon: const Icon(
+                          Icons.image_outlined,
+                          color: Colors.grey,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Image preview (only show if image is selected)
+                if (_imageFile != null || _imageBytes != null)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A2A),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.grey[800]!),
+                    ),
+                    child: Column(
+                      children: [
+                        // Image preview
+                        Container(
+                          height: 200,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(15),
+                            ),
+                            color: Colors.grey[900],
+                          ),
+                          child: Stack(
+                            children: [
+                              // Image
+                              if (_imageFile != null)
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(15),
+                                  ),
+                                  child: Image.file(
+                                    _imageFile!,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  ),
+                                )
+                              else if (_imageBytes != null)
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(15),
+                                  ),
+                                  child: Image.memory(
+                                    _imageBytes!,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  ),
+                                ),
+                              
+                              // Trash can icon overlay
+                              Positioned(
+                                top: 10,
+                                right: 10,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _imageFile = null;
+                                        _imageBytes = null;
+                                        _imageFileName = null;
+                                      });
+                                    },
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      padding: const EdgeInsets.all(8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

@@ -69,9 +69,9 @@ class _NotificationBellIconState extends ConsumerState<NotificationBellIcon> wit
     authState.whenData((user) {
       if (user != null && !_pollingStarted && !_disposed) {
         try {
-          // Start polling for notifications with reasonable interval
+          // Start polling for notifications with faster interval for real-time feel
           ref.read(notificationsProvider(user.id).notifier).startPolling(
-            interval: const Duration(seconds: 60), // Less frequent to prevent flickering
+            interval: const Duration(seconds: 15), // More frequent for real-time updates
           );
           
           _pollingStarted = true;

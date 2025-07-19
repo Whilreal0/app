@@ -14,6 +14,44 @@ class NotificationCenterScreen extends ConsumerStatefulWidget {
 }
 
 class _NotificationCenterScreenState extends ConsumerState<NotificationCenterScreen> {
+  
+  void _showDeleteAllConfirmation(BuildContext context, NotificationsNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete All Notifications'),
+          content: const Text(
+            'Are you sure you want to delete all notifications? This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                try {
+                  notifier.deleteAllNotifications();
+                } catch (e) {
+                  // If notifier is disposed, just return
+                  return;
+                }
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: const Text('Delete All'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
@@ -57,6 +95,13 @@ class _NotificationCenterScreenState extends ConsumerState<NotificationCenterScr
                     // If notifier is disposed, just return
                     return;
                   }
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_sweep),
+                tooltip: 'Delete all notifications',
+                onPressed: () {
+                  _showDeleteAllConfirmation(context, notifier);
                 },
               ),
             ],

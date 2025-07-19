@@ -25,6 +25,19 @@ class Post {
   });
 
   factory Post.fromMap(Map<String, dynamic> map) {
+    // Parse timestamp and convert to local time if it's in UTC
+    DateTime parseTimestamp(dynamic timestamp) {
+      if (timestamp is String) {
+        final parsed = DateTime.parse(timestamp);
+        // If the timestamp ends with 'Z', it's UTC, convert to local
+        if (timestamp.endsWith('Z')) {
+          return parsed.toLocal();
+        }
+        return parsed;
+      }
+      return DateTime.now(); // fallback
+    }
+
     return Post(
       id: map['id'],
       userId: map['user_id'],
@@ -34,8 +47,8 @@ class Post {
       caption: map['caption'] ?? '',
       likesCount: map['likes_count'] ?? 0,
       commentsCount: map['comments_count'] ?? 0,
-      createdAt: DateTime.parse(map['created_at']),
-      isLikedByMe: false, // Always false from DB!
+      createdAt: parseTimestamp(map['created_at']),
+      isLikedByMe: map['is_liked_by_me'] ?? false,
     );
   }
 
