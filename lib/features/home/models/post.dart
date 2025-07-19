@@ -48,7 +48,7 @@ class Post {
       likesCount: map['likes_count'] ?? 0,
       commentsCount: map['comments_count'] ?? 0,
       createdAt: parseTimestamp(map['created_at']),
-      isLikedByMe: false, // Always false from DB!
+      isLikedByMe: map['is_liked_by_me'] ?? false,
     );
   }
 

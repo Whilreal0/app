@@ -7,7 +7,6 @@ import '../../features/auth/screens/register_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/home/screens/comments_screen.dart';
-import '../../features/home/screens/fyp_screen.dart';
 import '../../features/notifications/screens/notification_center_screen.dart';
 import '../../features/post/screens/post_screen.dart';
 import '../../features/post/screens/post_details_screen.dart';
