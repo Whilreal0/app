@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/providers/post_report_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -98,6 +99,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   _buildSection(
                     'Administration',
                     [
+                      _buildActionTile(
+                        'Reported Posts',
+                        Icons.report_problem,
+                        () => context.push('/reported-posts'),
+                      ),
                       _buildActionTile(
                         'Database Management',
                         Icons.storage,

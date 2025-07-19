@@ -9,10 +9,22 @@ class PostService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final NotificationService _notificationService = NotificationService();
 
-  Future<void> addPost(Post post) async {
-    await _supabase.from('posts').insert(post.toMap()).select().single();
-    // Optionally, you can return the created Post or handle errors here
-    // return Post.fromMap(response);
+  Future<Post> addPost(Post post) async {
+    // Create a map without created_at to let database set it automatically
+    final postData = {
+      'id': post.id,
+      'user_id': post.userId,
+      'username': post.username,
+      'avatar_url': post.avatarUrl,
+      'image_url': post.imageUrl,
+      'caption': post.caption,
+      'likes_count': post.likesCount,
+      'comments_count': post.commentsCount,
+      // Don't send created_at - let database set it with default value
+    };
+    
+    final response = await _supabase.from('posts').insert(postData).select().single();
+    return Post.fromMap(response);
   }
 
   Future<List<Post>> fetchPostsWithLikeState(String userId) async {

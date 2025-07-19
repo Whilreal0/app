@@ -7,34 +7,47 @@ import '../providers/posts_provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../shared/widgets/notification_bell_icon.dart';
+import '../../../core/providers/post_report_provider.dart';
 
-class HomeScreen extends ConsumerWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+class HomeScreen extends ConsumerStatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
   String _formatTimestamp(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
 
-    if (difference.inSeconds < 60) {
+    if (difference.inSeconds < 59) {
       return 'just now';
     } else if (difference.inMinutes < 60) {
       final minutes = difference.inMinutes;
-      return '$minutes ${minutes == 1 ? 'min' : 'mins'} ago';
+      return '${minutes}m';
     } else if (difference.inHours < 24) {
       final hours = difference.inHours;
-      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
+      return '${hours}h';
     } else if (difference.inDays < 7) {
       final days = difference.inDays;
-      return '$days ${days == 1 ? 'day' : 'days'} ago';
+      final remainingHours = difference.inHours % 24;
+      if (remainingHours > 0) {
+        return '${days}d${remainingHours}h';
+      } else {
+        return '${days}d';
+      }
     } else if (difference.inDays < 30) {
       final weeks = (difference.inDays / 7).floor();
-      return '$weeks ${weeks == 1 ? 'week' : 'weeks'} ago';
+      return '${weeks}w';
     } else if (difference.inDays < 365) {
       final months = (difference.inDays / 30).floor();
-      return '$months ${months == 1 ? 'month' : 'months'} ago';
+      return '${months}mo';
     } else {
       final years = (difference.inDays / 365).floor();
-      return '$years ${years == 1 ? 'year' : 'years'} ago';
+      return '${years}y';
     }
   }
 
@@ -105,8 +118,12 @@ class HomeScreen extends ConsumerWidget {
 
   void _editPost(BuildContext context, Post post) {
     // TODO: Navigate to edit post screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit post feature coming soon!')),
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(
+        content: Text('Edit post feature coming soon!'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -124,19 +141,35 @@ class HomeScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              
+              // Show snackbar immediately when button is pressed
+              _scaffoldMessengerKey.currentState?.showSnackBar(
+                const SnackBar(
+                  content: Text('Deleting post...'),
+                  backgroundColor: Colors.blue,
+                  duration: Duration(seconds: 1),
+                ),
+              );
+              
               try {
                 await ref.read(postsProvider(user.id).notifier).deletePost(post);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Post deleted successfully')),
-                  );
-                }
+                
+                // Show success snackbar
+                _scaffoldMessengerKey.currentState?.showSnackBar(
+                  const SnackBar(
+                    content: Text('Post deleted successfully'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error deleting post: $e')),
-                  );
-                }
+                _scaffoldMessengerKey.currentState?.showSnackBar(
+                  SnackBar(
+                    content: Text('Error deleting post: $e'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
               }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -161,6 +194,16 @@ class HomeScreen extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              
+              // Show snackbar immediately when button is pressed
+              _scaffoldMessengerKey.currentState?.showSnackBar(
+                const SnackBar(
+                  content: Text('Reporting post...'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 1),
+                ),
+              );
+              
               try {
                 await ref.read(postReportProvider.notifier).reportPost(
                   postId: post.id,
@@ -168,23 +211,23 @@ class HomeScreen extends ConsumerWidget {
                   postOwnerId: post.userId,
                   reason: 'User reported',
                 );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Post reported successfully. Thank you for helping keep our community safe.'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
+                
+                // Show success snackbar
+                _scaffoldMessengerKey.currentState?.showSnackBar(
+                  const SnackBar(
+                    content: Text('Post reported successfully. Thank you for helping keep our community safe.'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error reporting post: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                _scaffoldMessengerKey.currentState?.showSnackBar(
+                  SnackBar(
+                    content: Text('Error reporting post: $e'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
               }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.orange),
@@ -196,197 +239,200 @@ class HomeScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final posts = ref.watch(currentUserPostsProvider);
     final authState = ref.watch(authStateProvider);
 
-    return authState.when(
-      data: (user) {
-        if (user == null) {
-          return Scaffold(
-            body: Center(child: Text('Please log in')),
-          );
-        }
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: authState.when(
+        data: (user) {
+          if (user == null) {
+            return Scaffold(
+              body: Center(child: Text('Please log in')),
+            );
+          }
 
-        if (posts.isEmpty) {
+          if (posts.isEmpty) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
+              body: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
           return Scaffold(
             appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
-            body: const Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        return Scaffold(
-          appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              // Refresh posts when user pulls down
-              try {
-                final authState = ref.read(authStateProvider);
-                authState.whenData((user) {
-                  if (user != null) {
-                    ref.read(postsProvider(user.id).notifier).refresh();
-                  }
-                });
-              } catch (e) {
-                // Handle error silently
-              }
-            },
-            child: ListView.builder(
-              itemCount: posts.length,
-              itemBuilder: (context, index) {
-                final post = posts[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 4,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header: Avatar, Username, Timestamp
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundImage: post.avatarUrl != null && post.avatarUrl.isNotEmpty
-                                  ? NetworkImage(post.avatarUrl)
-                                  : null,
-                              backgroundColor: Colors.grey,
-                              radius: 20,
-                              child: (post.avatarUrl == null || post.avatarUrl.isEmpty)
-                                  ? Icon(Icons.person)
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    post.username,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                  Text(
-                                    _formatTimestamp(post.createdAt),
-                                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                                  ),
-                                ],
+            body: RefreshIndicator(
+              onRefresh: () async {
+                // Refresh posts when user pulls down
+                try {
+                  final authState = ref.read(authStateProvider);
+                  authState.whenData((user) {
+                    if (user != null) {
+                      ref.read(postsProvider(user.id).notifier).refresh();
+                    }
+                  });
+                } catch (e) {
+                  // Handle error silently
+                }
+              },
+              child: ListView.builder(
+                itemCount: posts.length,
+                itemBuilder: (context, index) {
+                  final post = posts[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header: Avatar, Username, Timestamp
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundImage: post.avatarUrl != null && post.avatarUrl.isNotEmpty
+                                    ? NetworkImage(post.avatarUrl)
+                                    : null,
+                                backgroundColor: Colors.grey,
+                                radius: 20,
+                                child: (post.avatarUrl == null || post.avatarUrl.isEmpty)
+                                    ? Icon(Icons.person)
+                                    : null,
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.more_vert),
-                              onPressed: () {
-                                _showPostOptions(context, post, user);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Caption
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Text(
-                          post.caption,
-                          style: const TextStyle(fontSize: 15),
-                        ),
-                      ),
-                      
-                      // Only show the image if imageUrl is not empty
-                      if (post.imageUrl.isNotEmpty)
-                        ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(0), bottom: Radius.circular(0)),
-                          child: Image.network(
-                            post.imageUrl,
-                            width: double.infinity,
-                            height: 300,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const SizedBox(
-                              height: 100,
-                              child: Center(child: Text('Image failed to load')),
-                            ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      post.username,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    ),
+                                    Text(
+                                      _formatTimestamp(post.createdAt),
+                                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.more_vert),
+                                onPressed: () {
+                                  _showPostOptions(context, post, user);
+                                },
+                              ),
+                            ],
                           ),
                         ),
-                      // Action Row
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                post.isLikedByMe ? Icons.favorite : Icons.favorite_border,
-                                color: post.isLikedByMe ? Colors.red : null,
-                              ),
-                              onPressed: () {
-                                if (post.isLikedByMe) {
-                                  ref.read(postsProvider(user.id).notifier).unlikePost(post);
-                                } else {
-                                  ref.read(postsProvider(user.id).notifier).likePost(post);
-                                }
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.mode_comment_outlined),
-                              onPressed: () {
-                                // Navigate to comments screen
-                                context.push('/comments/${post.id}');
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.send_outlined),
-                              onPressed: () {},
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.bookmark_border),
-                              onPressed: () {},
-                            ),
-                          ],
+                        // Caption
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Text(
+                            post.caption,
+                            style: const TextStyle(fontSize: 15),
+                          ),
                         ),
-                      ),
-                      // Likes and comments summary
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (post.likesCount > 0)
-                              Text(
-                                'Liked by ${post.likesCount} ${post.likesCount == 1 ? 'other' : 'others'}',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        
+                        // Only show the image if imageUrl is not empty
+                        if (post.imageUrl.isNotEmpty)
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(0), bottom: Radius.circular(0)),
+                            child: Image.network(
+                              post.imageUrl,
+                              width: double.infinity,
+                              height: 300,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const SizedBox(
+                                height: 100,
+                                child: Center(child: Text('Image failed to load')),
                               ),
-                            if (post.commentsCount > 0)
-                              GestureDetector(
-                                onTap: () {
+                            ),
+                          ),
+                        // Action Row
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  post.isLikedByMe ? Icons.favorite : Icons.favorite_border,
+                                  color: post.isLikedByMe ? Colors.red : null,
+                                ),
+                                onPressed: () {
+                                  if (post.isLikedByMe) {
+                                    ref.read(postsProvider(user.id).notifier).unlikePost(post);
+                                  } else {
+                                    ref.read(postsProvider(user.id).notifier).likePost(post);
+                                  }
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.mode_comment_outlined),
+                                onPressed: () {
                                   // Navigate to comments screen
                                   context.push('/comments/${post.id}');
                                 },
-                                child: Text(
-                                  'View all ${post.commentsCount} comments',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.send_outlined),
+                                onPressed: () {},
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.bookmark_border),
+                                onPressed: () {},
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Likes and comments summary
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (post.likesCount > 0)
+                                Text(
+                                  'Liked by ${post.likesCount} ${post.likesCount == 1 ? 'other' : 'others'}',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                ),
+                              if (post.commentsCount > 0)
+                                GestureDetector(
+                                  onTap: () {
+                                    // Navigate to comments screen
+                                    context.push('/comments/${post.id}');
+                                  },
+                                  child: Text(
+                                    'View all ${post.commentsCount} comments',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
                                   ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                );
-              },
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-        );
-      },
-      loading: () => Scaffold(
-        appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
-        body: const Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, stack) => Scaffold(
-        appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
-        body: Center(child: Text('Error: $error')),
+          );
+        },
+        loading: () => Scaffold(
+          appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
+        error: (error, stack) => Scaffold(
+          appBar: AppBar(title: const Text('Home'), actions: [NotificationBellIcon()]),
+          body: Center(child: Text('Error: $error')),
+        ),
       ),
     );
   }
