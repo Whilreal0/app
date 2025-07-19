@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/notification.dart';
 import '../services/notification_service.dart';
 import '../config/notification_polling_config.dart';
@@ -103,6 +104,7 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
   final Ref ref;
   final String? userId;
   Timer? _pollingTimer;
+  RealtimeChannel? _realtimeChannel;
   bool _disposed = false;
   DateTime? _lastUpdate;
   bool _isLoading = false;
@@ -111,6 +113,9 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     if (userId != null && !_disposed) {
       // Register for real-time updates
       NotificationManager.addListener(userId!, _handleRealTimeUpdate);
+      
+      // Set up Supabase real-time subscription
+      _setupRealtimeSubscription();
       
       // Use a microtask to ensure the widget is fully built before loading
       Future.microtask(() {
@@ -121,10 +126,75 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     }
   }
 
+  void _setupRealtimeSubscription() {
+    if (userId == null || _disposed) return;
+    
+    try {
+      // Set up Supabase real-time subscription for notifications
+      final supabase = Supabase.instance.client;
+      
+      _realtimeChannel = supabase
+          .channel('notifications_${userId}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: userId,
+            ),
+            callback: (payload) {
+              print('Real-time notification received: $payload');
+              _handleRealTimeUpdate();
+            },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: userId,
+            ),
+            callback: (payload) {
+              print('Real-time notification update received: $payload');
+              _handleRealTimeUpdate();
+            },
+          )
+          .subscribe((status, [error]) {
+            if (error != null) {
+              // Log error silently for production
+            }
+          });
+      
+      // Also start polling as a fallback with faster interval for real-time feel
+      startPolling(interval: NotificationPollingConfig.realtimePollingInterval);
+    } catch (e) {
+      // Fallback to polling only with faster interval
+      startPolling(interval: NotificationPollingConfig.realtimePollingInterval);
+    }
+  }
+
   void _handleRealTimeUpdate() {
     if (!_disposed && userId != null) {
       // Refresh immediately when notified
       _refreshSilently();
+      
+      // Also trigger a refresh of the unread count
+      try {
+        ref.read(unreadNotificationCountProvider(userId!).notifier).refreshSilently();
+      } catch (e) {
+        // Ignore errors if provider is disposed
+      }
+      
+      // Trigger bell icon update
+      try {
+        NotificationManager.notifyUpdate('global');
+      } catch (e) {
+        // Ignore errors if provider is disposed
+      }
     }
   }
 
@@ -170,9 +240,9 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
         return;
       }
       
-      // Debounce: prevent updates more frequent than 5 seconds
+      // Debounce: prevent updates more frequent than 2 seconds for real-time feel
       if (_lastUpdate != null && 
-          DateTime.now().difference(_lastUpdate!) < const Duration(seconds: 5)) {
+          DateTime.now().difference(_lastUpdate!) < const Duration(seconds: 2)) {
         return;
       }
       
@@ -256,6 +326,16 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     _disposed = true;
     _pollingTimer?.cancel();
     
+    // Unsubscribe from real-time channel
+    if (_realtimeChannel != null) {
+      try {
+        Supabase.instance.client.removeChannel(_realtimeChannel!);
+      } catch (e) {
+        // Log error silently for production
+      }
+      _realtimeChannel = null;
+    }
+    
     // Remove from real-time update listeners
     if (userId != null) {
       NotificationManager.removeListener(userId!);
@@ -309,6 +389,30 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
   Future<void> markAllAsRead() async {
     if (_disposed) return;
     await markAsRead();
+  }
+
+  Future<void> deleteAllNotifications() async {
+    if (_disposed || userId == null) return;
+
+    try {
+      await ref.read(notificationServiceProvider).deleteAllNotifications(userId!);
+      
+      // Update state optimistically
+      if (!_disposed) {
+        state = const AsyncValue.data([]);
+      }
+
+      // Reset unread count
+      if (!_disposed && userId != null) {
+        try {
+          ref.read(unreadNotificationCountProvider(userId!).notifier).reset();
+        } catch (e) {
+          // Ignore errors if provider is disposed
+        }
+      }
+    } catch (e) {
+      // Handle error silently
+    }
   }
 
   Future<void> refresh() async {
