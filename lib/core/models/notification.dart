@@ -4,8 +4,11 @@ enum NotificationType {
   commentLike('comment_like'),
   commentReply('comment_reply'),
   postLike('post_like'),
+  postComment('post_comment'),
   follow('follow'),
-  mention('mention');
+  mention('mention'),
+  systemNotification('system_notification'),
+  pushNotification('push_notification');
 
   const NotificationType(this.value);
   final String value;
@@ -48,22 +51,32 @@ class Notification {
   });
 
   factory Notification.fromMap(Map<String, dynamic> map) {
-    return Notification(
-      id: map['id'],
-      userId: map['user_id'],
-      fromUserId: map['from_user_id'],
-      fromUsername: map['from_username'],
-      fromAvatarUrl: map['from_avatar_url'],
-      type: NotificationType.fromString(map['type']),
-      title: map['title'],
-      message: map['message'],
-      postId: map['post_id'],
-      commentId: map['comment_id'],
-      isRead: map['is_read'] ?? false,
+    // Handle different possible field names for is_read
+    bool isRead = false;
+    if (map.containsKey('is_read')) {
+      isRead = map['is_read'] ?? false;
+    } else if (map.containsKey('read')) {
+      isRead = map['read'] ?? false;
+    }
+    
+    final notification = Notification(
+      id: map['id']?.toString() ?? '',
+      userId: map['user_id']?.toString() ?? '',
+      fromUserId: map['from_user_id']?.toString(),
+      fromUsername: map['from_username']?.toString(),
+      fromAvatarUrl: map['from_avatar_url']?.toString(),
+      type: NotificationType.fromString(map['type']?.toString() ?? ''),
+      title: map['title']?.toString() ?? '',
+      message: map['message']?.toString() ?? '',
+      postId: map['post_id']?.toString(),
+      commentId: map['comment_id']?.toString(),
+      isRead: isRead,
       createdAt: map['created_at'] != null
-          ? DateTime.parse(map['created_at']).toLocal()
+          ? DateTime.parse(map['created_at'].toString()).toLocal()
           : DateTime.now(),
     );
+    
+    return notification;
   }
 
   Map<String, dynamic> toMap() {
@@ -120,10 +133,16 @@ class Notification {
         return '${fromUsername ?? 'Someone'} replied to your comment';
       case NotificationType.postLike:
         return '${fromUsername ?? 'Someone'} liked your post';
+      case NotificationType.postComment:
+        return '${fromUsername ?? 'Someone'} commented on your post';
       case NotificationType.follow:
         return '${fromUsername ?? 'Someone'} started following you';
       case NotificationType.mention:
         return '${fromUsername ?? 'Someone'} mentioned you';
+      case NotificationType.systemNotification:
+        return title;
+      case NotificationType.pushNotification:
+        return title;
     }
   }
 
@@ -135,10 +154,16 @@ class Notification {
         return 'Tap to view the reply';
       case NotificationType.postLike:
         return 'Tap to view the post';
+      case NotificationType.postComment:
+        return 'Tap to view the comment';
       case NotificationType.follow:
         return 'Tap to view their profile';
       case NotificationType.mention:
         return 'Tap to view the post';
+      case NotificationType.systemNotification:
+        return message;
+      case NotificationType.pushNotification:
+        return message;
     }
   }
 
@@ -148,11 +173,16 @@ class Notification {
       case NotificationType.postLike:
         return Icons.favorite;
       case NotificationType.commentReply:
-        return Icons.reply;
+      case NotificationType.postComment:
+        return Icons.comment;
       case NotificationType.follow:
         return Icons.person_add;
       case NotificationType.mention:
         return Icons.alternate_email;
+      case NotificationType.systemNotification:
+        return Icons.notifications;
+      case NotificationType.pushNotification:
+        return Icons.notifications_active;
     }
   }
 
@@ -162,11 +192,16 @@ class Notification {
       case NotificationType.postLike:
         return Colors.red;
       case NotificationType.commentReply:
+      case NotificationType.postComment:
         return Colors.blue;
       case NotificationType.follow:
         return Colors.green;
       case NotificationType.mention:
         return Colors.orange;
+      case NotificationType.systemNotification:
+        return Colors.grey;
+      case NotificationType.pushNotification:
+        return Colors.purple;
     }
   }
 } 

@@ -1,8 +1,13 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/home/models/post.dart';
+import 'notification_service.dart';
+import '../providers/notification_provider.dart';
+import '../providers/auth_provider.dart';
 
 class PostService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final NotificationService _notificationService = NotificationService();
 
   Future<void> addPost(Post post) async {
     await _supabase.from('posts').insert(post.toMap()).select().single();
@@ -37,37 +42,43 @@ class PostService {
         .toList();
   }
 
-  Future<void> likePost(String postId, String userId) async {
+  Future<void> likePost(String postId, String userId, {Ref? ref}) async {
     try {
+      print('PostService: Liking post: $postId by user: $userId');
       await _supabase.from('post_likes').insert({
         'post_id': postId,
         'user_id': userId,
       });
 
-      // --- Notification integration for post like ---
-      // Fetch the post to get the owner
+      // Get the post to get the owner
       final post = await _supabase
           .from('posts')
           .select('user_id')
           .eq('id', postId)
           .single();
       final postOwnerId = post['user_id'];
+      print('PostService: Post owner: $postOwnerId, current user: $userId');
+      
+      // Create notification if not liking own post
       if (postOwnerId != userId) {
-        await _supabase.from('notifications').insert({
-          'user_id': postOwnerId,
-          'from_user_id': userId,
-          'type': 'post_like',
-          'title': 'user liked your post',
-          'message': 'Tap to view the post',
-          'post_id': postId,
-          'is_read': false,
-          // 'created_at': DateTime.now().toIso8601String(), // Let DB set this
-        });
+        print('PostService: Creating post like notification');
+        await _notificationService.createPostLikeNotification(
+          postId: postId,
+          fromUserId: userId,
+          postOwnerId: postOwnerId,
+        );
+        
+        // Note: UI updates should be handled by the calling widget, not the service
+        print('PostService: Post like notification created - UI will update on next poll');
+      } else {
+        print('PostService: Skipping post like notification - user is liking their own post');
       }
-      // --- End notification integration ---
     } on PostgrestException catch (e) {
       if (e.code == '23505') {
+        print('PostService: Post already liked by user');
+        // Duplicate key error - already liked
       } else {
+        print('PostService: Error liking post: $e');
         rethrow;
       }
     }
@@ -78,5 +89,25 @@ class PostService {
       .delete()
       .eq('post_id', postId)
       .eq('user_id', userId);
+  }
+
+  Future<void> deletePost(String postId, String userId) async {
+    // First verify the user owns the post
+    final post = await _supabase
+        .from('posts')
+        .select('user_id')
+        .eq('id', postId)
+        .single();
+    
+    if (post['user_id'] != userId) {
+      throw Exception('You can only delete your own posts');
+    }
+
+    // Delete related data first (likes, comments, etc.)
+    await _supabase.from('post_likes').delete().eq('post_id', postId);
+    await _supabase.from('comments').delete().eq('post_id', postId);
+    
+    // Finally delete the post
+    await _supabase.from('posts').delete().eq('id', postId);
   }
 } 

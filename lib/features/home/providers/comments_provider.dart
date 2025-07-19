@@ -97,6 +97,7 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
         userId: userId!,
         content: content,
         parentCommentId: parentCommentId,
+        ref: ref,
       );
 
       if (newComment != null) {
@@ -161,7 +162,7 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
       });
 
       // Call the service
-      await CommentService().likeComment(commentId, userId!);
+      await CommentService().likeComment(commentId, userId!, ref: ref);
       print('Provider: Comment liked successfully');
     } catch (e) {
       print('Provider: Error liking comment: $e');
@@ -196,6 +197,47 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
       print('Provider: Comment unliked successfully');
     } catch (e) {
       print('Provider: Error unliking comment: $e');
+      // Revert to original state on error
+      state = originalState;
+    }
+  }
+
+  Future<void> editComment(String commentId, String newContent) async {
+    if (userId == null) return;
+
+    // Store original state for rollback
+    final originalState = state;
+
+    try {
+      // Optimistically update UI
+      state.whenData((comments) {
+        final updatedComments = _updateCommentInState(comments, commentId, (comment) {
+          return comment.copyWith(
+            content: newContent,
+            isEditing: false, // Exit edit mode
+          );
+        });
+        state = AsyncValue.data(updatedComments);
+      });
+
+      // Call the service
+      final updatedComment = await CommentService().editComment(commentId, newContent);
+      
+      if (updatedComment != null) {
+        // Update with the real comment data
+        state.whenData((comments) {
+          final updatedComments = _updateCommentInState(comments, commentId, (comment) {
+            return updatedComment.copyWith(
+              isLikedByMe: comment.isLikedByMe, // Preserve like state
+              replies: comment.replies, // Preserve replies
+              nestingLevel: comment.nestingLevel, // Preserve nesting
+            );
+          });
+          state = AsyncValue.data(updatedComments);
+        });
+      }
+    } catch (e) {
+      print('Error editing comment: $e');
       // Revert to original state on error
       state = originalState;
     }

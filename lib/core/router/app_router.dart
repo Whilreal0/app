@@ -3,17 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../features/auth/screens/auth_screen.dart';
+import '../../features/auth/screens/register_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
-import '../../features/users/screens/users_screen.dart';
-import '../../features/profile/screens/profile_screen.dart';
-import '../../features/settings/screens/settings_screen.dart';
 import '../../features/home/screens/home_screen.dart';
-import '../../features/search/screens/search_screen.dart';
-import '../../features/post/screens/post_screen.dart';
 import '../../features/home/screens/comments_screen.dart';
-import '../../shared/widgets/main_layout.dart';
 import '../../features/notifications/screens/notification_center_screen.dart';
+import '../../features/post/screens/post_screen.dart';
 import '../../features/post/screens/post_details_screen.dart';
+import '../../features/profile/screens/profile_screen.dart';
+import '../../features/search/screens/search_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
+import '../../features/settings/screens/notification_settings_screen.dart';
+import '../../features/users/screens/users_screen.dart';
+import '../../shared/widgets/main_layout.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -25,9 +27,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         data: (user) {
           final isLoggedIn = user != null;
           final isLoggingIn = state.matchedLocation == '/auth';
+          final isDashboard = state.matchedLocation == '/dashboard';
           
           if (!isLoggedIn && !isLoggingIn) return '/auth';
           if (isLoggedIn && isLoggingIn) return '/';
+          if (isDashboard) return '/'; // Redirect dashboard to home
           return null;
         },
         loading: () => null,
@@ -62,6 +66,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
           ),
+          GoRoute(
+            path: '/settings/notifications',
+            builder: (context, state) => const NotificationSettingsScreen(),
+          ),
+
           GoRoute(
             path: '/home',
             builder: (context, state) => const HomeScreen(),
