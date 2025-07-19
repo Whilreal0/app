@@ -14,6 +14,7 @@ import '../../features/home/screens/comments_screen.dart';
 import '../../shared/widgets/main_layout.dart';
 import '../../features/notifications/screens/notification_center_screen.dart';
 import '../../features/post/screens/post_details_screen.dart';
+import '../../features/debug/screens/storage_test_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -94,6 +95,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           final postId = state.pathParameters['postId']!;
           return CommentsScreen(postId: postId);
         },
+      ),
+      // Debug route (remove in production)
+      GoRoute(
+        path: '/debug/storage',
+        builder: (context, state) => const StorageTestScreen(),
       ),
     ],
   );

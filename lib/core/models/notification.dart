@@ -4,6 +4,7 @@ enum NotificationType {
   commentLike('comment_like'),
   commentReply('comment_reply'),
   postLike('post_like'),
+  postComment('post_comment'),
   follow('follow'),
   mention('mention');
 
@@ -120,6 +121,8 @@ class Notification {
         return '${fromUsername ?? 'Someone'} replied to your comment';
       case NotificationType.postLike:
         return '${fromUsername ?? 'Someone'} liked your post';
+      case NotificationType.postComment:
+        return '${fromUsername ?? 'Someone'} commented on your post';
       case NotificationType.follow:
         return '${fromUsername ?? 'Someone'} started following you';
       case NotificationType.mention:
@@ -135,6 +138,8 @@ class Notification {
         return 'Tap to view the reply';
       case NotificationType.postLike:
         return 'Tap to view the post';
+      case NotificationType.postComment:
+        return 'Tap to view the comment';
       case NotificationType.follow:
         return 'Tap to view their profile';
       case NotificationType.mention:
@@ -148,7 +153,8 @@ class Notification {
       case NotificationType.postLike:
         return Icons.favorite;
       case NotificationType.commentReply:
-        return Icons.reply;
+      case NotificationType.postComment:
+        return Icons.comment;
       case NotificationType.follow:
         return Icons.person_add;
       case NotificationType.mention:
@@ -162,6 +168,7 @@ class Notification {
       case NotificationType.postLike:
         return Colors.red;
       case NotificationType.commentReply:
+      case NotificationType.postComment:
         return Colors.blue;
       case NotificationType.follow:
         return Colors.green;

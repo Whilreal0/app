@@ -1,8 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/home/models/post.dart';
+import 'notification_service.dart';
 
 class PostService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final NotificationService _notificationService = NotificationService();
 
   Future<void> addPost(Post post) async {
     await _supabase.from('posts').insert(post.toMap()).select().single();
@@ -44,29 +46,25 @@ class PostService {
         'user_id': userId,
       });
 
-      // --- Notification integration for post like ---
-      // Fetch the post to get the owner
+      // Get the post to get the owner
       final post = await _supabase
           .from('posts')
           .select('user_id')
           .eq('id', postId)
           .single();
       final postOwnerId = post['user_id'];
+      
+      // Create notification if not liking own post
       if (postOwnerId != userId) {
-        await _supabase.from('notifications').insert({
-          'user_id': postOwnerId,
-          'from_user_id': userId,
-          'type': 'post_like',
-          'title': 'user liked your post',
-          'message': 'Tap to view the post',
-          'post_id': postId,
-          'is_read': false,
-          // 'created_at': DateTime.now().toIso8601String(), // Let DB set this
-        });
+        await _notificationService.createPostLikeNotification(
+          postId: postId,
+          fromUserId: userId,
+          postOwnerId: postOwnerId,
+        );
       }
-      // --- End notification integration ---
     } on PostgrestException catch (e) {
       if (e.code == '23505') {
+        // Duplicate key error - already liked
       } else {
         rethrow;
       }

@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../features/home/models/comment.dart';
 import '../services/notification_service.dart';
+import '../models/notification.dart';
 
 class CommentService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -215,17 +216,15 @@ class CommentService {
             .single();
         final postOwnerId = post['user_id'];
         if (postOwnerId != userId) {
-          await _supabase.from('notifications').insert({
-            'user_id': postOwnerId,
-            'from_user_id': userId,
-            'type': 'post_comment',
-            'title': 'user commented on your post',
-            'message': 'Tap to view the comment',
-            'post_id': postId,
-            'comment_id': response['id'],
-            'is_read': false,
-            // 'created_at': DateTime.now().toIso8601String(), // Let DB set this
-          });
+          await NotificationService().createNotification(
+            userId: postOwnerId,
+            fromUserId: userId,
+            type: NotificationType.postComment,
+            title: 'user commented on your post',
+            message: 'Tap to view the comment',
+            postId: postId,
+            commentId: response['id'],
+          );
         }
       }
       // --- End notification integration ---

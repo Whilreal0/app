@@ -2,8 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.dart';
 import '../services/notification_service.dart';
 import 'auth_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:realtime_client/realtime_client.dart' show PostgresChangeFilterType;
+import 'dart:async';
 
 // Provider for notification service
 final notificationServiceProvider = Provider<NotificationService>((ref) {
@@ -39,40 +38,23 @@ final currentUserUnreadCountProvider = Provider<AsyncValue<int>>((ref) {
   
   return authState.when(
     data: (user) {
-      if (user == null) {
-        print('currentUserUnreadCountProvider - user is null, returning 0');
-        return const AsyncValue.data(0);
-      }
-      print('currentUserUnreadCountProvider - user: ${user.id}');
-      final result = ref.watch(unreadNotificationCountProvider(user.id));
-      print('currentUserUnreadCountProvider - result: $result');
-      return result;
+      if (user == null) return const AsyncValue.data(0);
+      return ref.watch(unreadNotificationCountProvider(user.id));
     },
-    loading: () {
-      print('currentUserUnreadCountProvider - loading');
-      return const AsyncValue.loading();
-    },
-    error: (_, __) {
-      print('currentUserUnreadCountProvider - error');
-      return AsyncValue.error('User not found', StackTrace.current);
-    },
+    loading: () => const AsyncValue.loading(),
+    error: (_, __) => AsyncValue.error('User not found', StackTrace.current),
   );
 });
 
 class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>> {
   final Ref ref;
   final String? userId;
-  RealtimeChannel? _realtimeChannel;
+  Timer? _pollingTimer;
   bool _disposed = false;
   
   NotificationsNotifier(this.ref, this.userId) : super(const AsyncValue.loading()) {
-    print('NotificationsNotifier constructor called for user: $userId');
     if (userId != null && !_disposed) {
-      print('NotificationsNotifier constructor - loading notifications and setting up realtime');
       loadNotifications();
-      _setupRealtimeSubscription();
-    } else {
-      print('NotificationsNotifier constructor - userId is null or disposed');
     }
   }
 
@@ -80,7 +62,6 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     if (userId == null || _disposed) return;
     
     try {
-      print('Loading notifications for user: $userId');
       if (_disposed) return;
       state = const AsyncValue.loading();
       final notifications = await ref.read(notificationServiceProvider).fetchNotifications(userId!);
@@ -88,9 +69,42 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
       state = AsyncValue.data(notifications);
     } catch (e) {
       if (_disposed) return;
-      print('Error loading notifications: $e');
       state = AsyncValue.error(e, StackTrace.current);
     }
+  }
+
+  void startPolling() {
+    if (userId == null || _pollingTimer != null) return;
+    
+    // Poll every 5 seconds for new notifications
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
+      
+      // Refresh notifications
+      await loadNotifications();
+      
+      // Also refresh unread count
+      if (!_disposed && userId != null) {
+        await ref.read(unreadNotificationCountProvider(userId!).notifier).refresh();
+      }
+    });
+  }
+
+  void stopPolling() {
+    if (_pollingTimer != null) {
+      _pollingTimer!.cancel();
+      _pollingTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    stopPolling();
+    super.dispose();
   }
 
   Future<void> markAsRead({List<String>? notificationIds}) async {
@@ -129,105 +143,6 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     await markAsRead();
   }
 
-  void _setupRealtimeSubscription() {
-    if (userId == null || _realtimeChannel != null) return;
-    
-    print('_setupRealtimeSubscription - setting up for user: $userId');
-    
-    try {
-      _realtimeChannel = Supabase.instance.client.channel('public:notifications_user_$userId')
-        ..onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'notifications',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: userId!,
-          ),
-          callback: (payload) {
-            print('New notification received: $payload');
-            _handleNewNotification(payload);
-          },
-        )
-        ..subscribe((status, [error]) {
-          print('_setupRealtimeSubscription - subscription status: $status');
-          if (error != null) {
-            print('_setupRealtimeSubscription - subscription error: $error');
-          }
-        });
-        
-      print('_setupRealtimeSubscription - subscription set up for user: $userId');
-    } catch (e) {
-      print('_setupRealtimeSubscription - error setting up subscription: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    print('NotificationsNotifier.dispose() called for user: $userId');
-    _disposed = true;
-    if (_realtimeChannel != null) {
-      print('NotificationsNotifier.dispose() - unsubscribing from realtime channel');
-      _realtimeChannel!.unsubscribe();
-      _realtimeChannel = null;
-    }
-    super.dispose();
-  }
-
-  void _handleNewNotification(dynamic payload) {
-    if (_disposed) return; // Prevent updates after disposal
-    
-    print('_handleNewNotification called for user: $userId');
-    
-    try {
-      final newNotificationData = payload.newRecord as Map<String, dynamic>;
-      print('_handleNewNotification - new notification data: $newNotificationData');
-      
-      // Get from user's profile
-      _getFromUserProfile(newNotificationData['from_user_id']).then((fromUser) {
-        if (_disposed) return; // Check again after async operation
-        
-        final notification = Notification.fromMap({
-          ...newNotificationData,
-          'from_username': fromUser?['username'],
-          'from_avatar_url': fromUser?['avatar_url'],
-        });
-
-        print('_handleNewNotification - created notification: ${notification.id}');
-
-        // Add to state
-        state.whenData((notifications) {
-          if (_disposed) return; // Check before state update
-          final updatedNotifications = [notification, ...notifications];
-          state = AsyncValue.data(updatedNotifications);
-        });
-
-        // Update unread count
-        if (!_disposed && userId != null) {
-          print('_handleNewNotification - incrementing unread count');
-          ref.read(unreadNotificationCountProvider(userId!).notifier).increment();
-        }
-      });
-    } catch (e) {
-      print('Error handling new notification: $e');
-    }
-  }
-
-  Future<Map<String, dynamic>?> _getFromUserProfile(String fromUserId) async {
-    try {
-      final response = await Supabase.instance.client
-          .from('profiles')
-          .select('username, avatar_url')
-          .eq('id', fromUserId)
-          .single();
-      return response;
-    } catch (e) {
-      print('Error getting from user profile: $e');
-      return null;
-    }
-  }
-
   Future<void> refresh() async {
     if (_disposed) return;
     await loadNotifications();
@@ -249,19 +164,27 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
       final updated = [notification, ...notifications];
       state = AsyncValue.data(updated);
     });
+    
+    // Also refresh unread count when notification is added
+    if (!_disposed && userId != null) {
+      ref.read(unreadNotificationCountProvider(userId!).notifier).refresh();
+    }
   }
 
-  // Method to manually test realtime subscription
-  void testRealtimeSubscription() {
-    print('testRealtimeSubscription called for user: $userId');
-    print('testRealtimeSubscription - _realtimeChannel: $_realtimeChannel');
-    print('testRealtimeSubscription - _disposed: $_disposed');
-    
-    if (_realtimeChannel != null) {
-      print('testRealtimeSubscription - channel exists and is set up');
+  // Method to manually test polling
+  void testPolling() {
+    if (_pollingTimer != null) {
+      // Polling timer exists and is set up
     } else {
-      print('testRealtimeSubscription - no channel exists, trying to set up');
-      _setupRealtimeSubscription();
+      // No polling timer exists, starting polling
+      startPolling();
+    }
+  }
+
+  // Method to manually refresh unread count
+  void refreshUnreadCount() {
+    if (!_disposed && userId != null) {
+      ref.read(unreadNotificationCountProvider(userId!).notifier).refresh();
     }
   }
 }
@@ -272,12 +195,8 @@ class UnreadCountNotifier extends StateNotifier<AsyncValue<int>> {
   bool _disposed = false;
   
   UnreadCountNotifier(this.ref, this.userId) : super(const AsyncValue.loading()) {
-    print('UnreadCountNotifier constructor called for user: $userId');
     if (userId != null && !_disposed) {
-      print('UnreadCountNotifier constructor - loading unread count');
       loadUnreadCount();
-    } else {
-      print('UnreadCountNotifier constructor - userId is null or disposed');
     }
   }
 
@@ -286,15 +205,12 @@ class UnreadCountNotifier extends StateNotifier<AsyncValue<int>> {
     
     try {
       if (_disposed) return;
-      print('UnreadCountNotifier.loadUnreadCount() called for user: $userId');
       state = const AsyncValue.loading();
       final count = await ref.read(notificationServiceProvider).getUnreadCount(userId!);
       if (_disposed) return;
-      print('UnreadCountNotifier.loadUnreadCount() - loaded count: $count');
       state = AsyncValue.data(count);
     } catch (e) {
       if (_disposed) return;
-      print('Error loading unread count: $e');
       state = AsyncValue.error(e, StackTrace.current);
     }
   }
@@ -306,31 +222,23 @@ class UnreadCountNotifier extends StateNotifier<AsyncValue<int>> {
 
   void increment() {
     if (_disposed) return;
-    print('UnreadCountNotifier.increment() called for user: $userId');
-    print('UnreadCountNotifier.increment() - current state: $state');
-    
     state.whenData((count) {
       if (_disposed) return;
       final newCount = count + 1;
-      print('UnreadCountNotifier.increment() - old count: $count, new count: $newCount');
       state = AsyncValue.data(newCount);
-      print('UnreadCountNotifier.increment() - state updated to: $state');
     });
     
     // If state is not AsyncData, handle it
     if (state is! AsyncData) {
-      print('UnreadCountNotifier.increment() - state is not AsyncData, setting to 1');
       state = const AsyncValue.data(1);
     }
   }
 
   void decrement() {
     if (_disposed) return;
-    print('UnreadCountNotifier.decrement() called for user: $userId');
     state.whenData((count) {
       if (_disposed) return;
       final newCount = (count - 1).clamp(0, double.infinity).toInt();
-      print('UnreadCountNotifier.decrement() - old count: $count, new count: $newCount');
       state = AsyncValue.data(newCount);
     });
   }
