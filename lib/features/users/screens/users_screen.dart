@@ -187,22 +187,31 @@ class UsersScreen extends ConsumerWidget {
                             ),
                           ),
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: users.length,
-                          itemBuilder: (context, index) {
-                            final user = users[index];
-                            final canEdit = profile.isSuperAdmin ||
-                                (profile.isAdmin && !user.isSuperAdmin);
-
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: UserCard(
-                                user: user,
-                                canEdit: canEdit,
-                              ),
-                            );
+                      : RefreshIndicator(
+                          onRefresh: () async {
+                            try {
+                              await ref.read(usersNotifierProvider.notifier).refresh();
+                            } catch (e) {
+                              // Handle error silently
+                            }
                           },
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: users.length,
+                            itemBuilder: (context, index) {
+                              final user = users[index];
+                              final canEdit = profile.isSuperAdmin ||
+                                  (profile.isAdmin && !user.isSuperAdmin);
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: UserCard(
+                                  user: user,
+                                  canEdit: canEdit,
+                                ),
+                              );
+                            },
+                          ),
                         ),
                 ),
               ],

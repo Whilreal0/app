@@ -83,6 +83,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Icons.notifications_active,
                       () => context.push('/settings/notifications'),
                     ),
+
                     _buildSwitchTile(
                       'Dark Mode',
                       Icons.dark_mode,

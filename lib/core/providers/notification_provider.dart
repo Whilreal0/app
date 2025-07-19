@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.dart';
 import '../services/notification_service.dart';
+import '../config/notification_polling_config.dart';
 import 'auth_provider.dart';
 import 'dart:async';
 
@@ -18,6 +19,21 @@ final notificationsProvider = StateNotifierProvider.family<NotificationsNotifier
 final unreadNotificationCountProvider = StateNotifierProvider.family<UnreadCountNotifier, AsyncValue<int>, String?>((ref, userId) {
   return UnreadCountNotifier(ref, userId);
 });
+
+// Simple state notifier for immediate bell icon updates
+final bellIconUpdateProvider = StateNotifierProvider<BellIconUpdateNotifier, int>((ref) {
+  final notifier = BellIconUpdateNotifier();
+  NotificationManager.setBellIconNotifier(notifier);
+  return notifier;
+});
+
+class BellIconUpdateNotifier extends StateNotifier<int> {
+  BellIconUpdateNotifier() : super(0);
+  
+  void triggerUpdate() {
+    state = DateTime.now().millisecondsSinceEpoch;
+  }
+}
 
 // Convenience providers that automatically get the current user's data
 final currentUserNotificationsProvider = Provider<AsyncValue<List<Notification>>>((ref) {
@@ -46,51 +62,176 @@ final currentUserUnreadCountProvider = Provider<AsyncValue<int>>((ref) {
   );
 });
 
+// Global notification manager for real-time updates
+class NotificationManager {
+  static final Map<String, void Function()> _listeners = {};
+  static BellIconUpdateNotifier? _bellIconNotifier;
+  static final Map<String, UnreadCountNotifier?> _unreadCountNotifiers = {};
+  
+  static void addListener(String userId, void Function() callback) {
+    _listeners[userId] = callback;
+  }
+  
+  static void removeListener(String userId) {
+    _listeners.remove(userId);
+    _unreadCountNotifiers.remove(userId);
+  }
+  
+  static void setBellIconNotifier(BellIconUpdateNotifier notifier) {
+    _bellIconNotifier = notifier;
+  }
+  
+  static void setUnreadCountNotifier(String userId, UnreadCountNotifier notifier) {
+    _unreadCountNotifiers[userId] = notifier;
+  }
+  
+  static void notifyUpdate(String userId) {
+    _listeners[userId]?.call();
+    
+    // Trigger immediate bell icon update
+    _bellIconNotifier?.triggerUpdate();
+    
+    // Also refresh the unread count for this user
+    final unreadNotifier = _unreadCountNotifiers[userId];
+    if (unreadNotifier != null) {
+      unreadNotifier.refreshSilently();
+    }
+  }
+}
+
 class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>> {
   final Ref ref;
   final String? userId;
   Timer? _pollingTimer;
   bool _disposed = false;
+  DateTime? _lastUpdate;
+  bool _isLoading = false;
   
   NotificationsNotifier(this.ref, this.userId) : super(const AsyncValue.loading()) {
     if (userId != null && !_disposed) {
-      loadNotifications();
+      // Register for real-time updates
+      NotificationManager.addListener(userId!, _handleRealTimeUpdate);
+      
+      // Use a microtask to ensure the widget is fully built before loading
+      Future.microtask(() {
+        if (!_disposed) {
+          loadNotifications();
+        }
+      });
+    }
+  }
+
+  void _handleRealTimeUpdate() {
+    if (!_disposed && userId != null) {
+      // Refresh immediately when notified
+      _refreshSilently();
     }
   }
 
   Future<void> loadNotifications() async {
-    if (userId == null || _disposed) return;
+    if (_disposed || userId == null || _isLoading) {
+      return;
+    }
     
     try {
-      if (_disposed) return;
-      state = const AsyncValue.loading();
+      _isLoading = true;
+      
+      // Only show loading state if we don't have data yet
+      if (state is! AsyncData) {
+        state = const AsyncValue.loading();
+      }
+      
       final notifications = await ref.read(notificationServiceProvider).fetchNotifications(userId!);
-      if (_disposed) return;
-      state = AsyncValue.data(notifications);
+      
+      if (!_disposed) {
+        state = AsyncValue.data(notifications);
+        _lastUpdate = DateTime.now();
+      }
     } catch (e) {
-      if (_disposed) return;
-      state = AsyncValue.error(e, StackTrace.current);
+      if (!_disposed) {
+        state = AsyncValue.error(e, StackTrace.current);
+      }
+    } finally {
+      _isLoading = false;
     }
   }
 
-  void startPolling() {
-    if (userId == null || _pollingTimer != null) return;
+  void startPolling({Duration? interval}) {
+    if (userId == null || _pollingTimer != null || _disposed) {
+      return;
+    }
     
-    // Poll every 5 seconds for new notifications
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    final pollingInterval = interval ?? NotificationPollingConfig.defaultPollingInterval;
+    
+    // Poll at the specified interval for new notifications
+    _pollingTimer = Timer.periodic(pollingInterval, (timer) async {
       if (_disposed) {
         timer.cancel();
         return;
       }
       
-      // Refresh notifications
-      await loadNotifications();
+      // Debounce: prevent updates more frequent than 5 seconds
+      if (_lastUpdate != null && 
+          DateTime.now().difference(_lastUpdate!) < const Duration(seconds: 5)) {
+        return;
+      }
       
-      // Also refresh unread count
-      if (!_disposed && userId != null) {
-        await ref.read(unreadNotificationCountProvider(userId!).notifier).refresh();
+      try {
+        // Refresh notifications silently (without showing loading state)
+        await _refreshSilently();
+        
+        // Also refresh unread count
+        if (!_disposed && userId != null) {
+          try {
+            await ref.read(unreadNotificationCountProvider(userId!).notifier).refreshSilently();
+          } catch (e) {
+            // Ignore errors if provider is disposed
+          }
+        }
+      } catch (e) {
+        // Ignore errors if disposed
       }
     });
+  }
+
+  Future<void> _refreshSilently() async {
+    if (_disposed || userId == null || _isLoading) return;
+    
+    try {
+      _isLoading = true;
+      final notifications = await ref.read(notificationServiceProvider).fetchNotifications(userId!);
+      
+      if (!_disposed) {
+        // Only update if data actually changed to prevent unnecessary rebuilds
+        final currentState = state;
+        if (currentState is AsyncData) {
+          final currentNotifications = currentState.value;
+          if (currentNotifications == null || _hasNotificationsChanged(currentNotifications, notifications)) {
+            state = AsyncValue.data(notifications);
+            _lastUpdate = DateTime.now();
+          }
+        } else {
+          state = AsyncValue.data(notifications);
+          _lastUpdate = DateTime.now();
+        }
+      }
+    } catch (e) {
+      // Don't update state on error during silent refresh
+    } finally {
+      _isLoading = false;
+    }
+  }
+
+  bool _hasNotificationsChanged(List<Notification> oldNotifications, List<Notification> newNotifications) {
+    if (oldNotifications.length != newNotifications.length) return true;
+    
+    for (int i = 0; i < oldNotifications.length; i++) {
+      if (oldNotifications[i].id != newNotifications[i].id ||
+          oldNotifications[i].isRead != newNotifications[i].isRead) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void stopPolling() {
@@ -100,10 +241,26 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     }
   }
 
+  void changePollingInterval(Duration newInterval) {
+    if (_disposed) return;
+    
+    // Stop current polling
+    stopPolling();
+    
+    // Start polling with new interval
+    startPolling(interval: newInterval);
+  }
+
   @override
   void dispose() {
     _disposed = true;
-    stopPolling();
+    _pollingTimer?.cancel();
+    
+    // Remove from real-time update listeners
+    if (userId != null) {
+      NotificationManager.removeListener(userId!);
+    }
+    
     super.dispose();
   }
 
@@ -113,28 +270,39 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
     try {
       await ref.read(notificationServiceProvider).markAsRead(userId!, notificationIds: notificationIds);
       
-      // Update state optimistically
-      state.whenData((notifications) {
-        final updatedNotifications = notifications.map((notification) {
-          if (notificationIds == null || notificationIds.contains(notification.id)) {
-            return notification.copyWith(isRead: true);
+      // Update state optimistically only if not disposed
+      if (!_disposed) {
+        final currentState = state;
+        if (currentState is AsyncData) {
+          final notifications = currentState.value;
+          if (notifications != null) {
+            final updatedNotifications = notifications.map((notification) {
+              if (notificationIds == null || notificationIds.contains(notification.id)) {
+                return notification.copyWith(isRead: true);
+              }
+              return notification;
+            }).toList();
+            
+            if (!_disposed) {
+              state = AsyncValue.data(updatedNotifications);
+            }
           }
-          return notification;
-        }).toList();
-        
-        state = AsyncValue.data(updatedNotifications);
-      });
+        }
+      }
 
       // Refresh unread count
       if (!_disposed && userId != null) {
-        // Decrement unread count for each notification marked as read
-        final countToDecrement = notificationIds?.length ?? 1;
-        for (int i = 0; i < countToDecrement; i++) {
-          ref.read(unreadNotificationCountProvider(userId!).notifier).decrement();
+        try {
+          // Decrement unread count for each notification marked as read
+          final countToDecrement = notificationIds?.length ?? 1;
+          for (int i = 0; i < countToDecrement; i++) {
+            ref.read(unreadNotificationCountProvider(userId!).notifier).decrement();
+          }
+        } catch (e) {
+          // Ignore errors if provider is disposed
         }
       }
     } catch (e) {
-      print('Error marking notifications as read: $e');
     }
   }
 
@@ -150,41 +318,40 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<Notification>>
 
   void removeNotification(String notificationId) {
     if (_disposed) return;
-    state.whenData((notifications) {
-      if (_disposed) return;
-      final updated = notifications.where((n) => n.id != notificationId).toList();
-      state = AsyncValue.data(updated);
-    });
+    
+    final currentState = state;
+    if (currentState is AsyncData && !_disposed) {
+      final notifications = currentState.value;
+      if (notifications != null) {
+        final updated = notifications.where((n) => n.id != notificationId).toList();
+        if (!_disposed) {
+          state = AsyncValue.data(updated);
+        }
+      }
+    }
   }
 
   void addNotification(Notification notification) {
     if (_disposed) return;
-    state.whenData((notifications) {
-      if (_disposed) return;
-      final updated = [notification, ...notifications];
-      state = AsyncValue.data(updated);
-    });
+    
+    final currentState = state;
+    if (currentState is AsyncData && !_disposed) {
+      final notifications = currentState.value;
+      if (notifications != null) {
+        final updated = [notification, ...notifications];
+        if (!_disposed) {
+          state = AsyncValue.data(updated);
+        }
+      }
+    }
     
     // Also refresh unread count when notification is added
     if (!_disposed && userId != null) {
-      ref.read(unreadNotificationCountProvider(userId!).notifier).refresh();
-    }
-  }
-
-  // Method to manually test polling
-  void testPolling() {
-    if (_pollingTimer != null) {
-      // Polling timer exists and is set up
-    } else {
-      // No polling timer exists, starting polling
-      startPolling();
-    }
-  }
-
-  // Method to manually refresh unread count
-  void refreshUnreadCount() {
-    if (!_disposed && userId != null) {
-      ref.read(unreadNotificationCountProvider(userId!).notifier).refresh();
+      try {
+        ref.read(unreadNotificationCountProvider(userId!).notifier).increment();
+      } catch (e) {
+        // Ignore errors if provider is disposed
+      }
     }
   }
 }
@@ -193,25 +360,49 @@ class UnreadCountNotifier extends StateNotifier<AsyncValue<int>> {
   final Ref ref;
   final String? userId;
   bool _disposed = false;
+  bool _isLoading = false;
   
   UnreadCountNotifier(this.ref, this.userId) : super(const AsyncValue.loading()) {
     if (userId != null && !_disposed) {
-      loadUnreadCount();
+      // Register for real-time updates
+      NotificationManager.addListener(userId!, _handleRealTimeUpdate);
+      NotificationManager.setUnreadCountNotifier(userId!, this);
+      
+      // Use a microtask to ensure the widget is fully built before loading
+      Future.microtask(() {
+        if (!_disposed) {
+          loadUnreadCount();
+        }
+      });
+    }
+  }
+
+  void _handleRealTimeUpdate() {
+    if (!_disposed && userId != null) {
+      // Refresh immediately when notified
+      refreshSilently();
     }
   }
 
   Future<void> loadUnreadCount() async {
-    if (userId == null || _disposed) return;
+    if (userId == null || _disposed || _isLoading) {
+      return;
+    }
     
     try {
-      if (_disposed) return;
+      _isLoading = true;
       state = const AsyncValue.loading();
       final count = await ref.read(notificationServiceProvider).getUnreadCount(userId!);
-      if (_disposed) return;
-      state = AsyncValue.data(count);
+      
+      if (!_disposed) {
+        state = AsyncValue.data(count);
+      }
     } catch (e) {
-      if (_disposed) return;
-      state = AsyncValue.error(e, StackTrace.current);
+      if (!_disposed) {
+        state = AsyncValue.error(e, StackTrace.current);
+      }
+    } finally {
+      _isLoading = false;
     }
   }
 
@@ -220,27 +411,74 @@ class UnreadCountNotifier extends StateNotifier<AsyncValue<int>> {
     await loadUnreadCount();
   }
 
+  Future<void> refreshSilently() async {
+    if (userId == null || _disposed || _isLoading) return;
+    
+    try {
+      _isLoading = true;
+      final count = await ref.read(notificationServiceProvider).getUnreadCount(userId!);
+      
+      if (!_disposed) {
+        // Only update if count actually changed to prevent unnecessary rebuilds
+        final currentState = state;
+        if (currentState is AsyncData) {
+          final currentCount = currentState.value;
+          if (currentCount != count) {
+            state = AsyncValue.data(count);
+          }
+        } else {
+          state = AsyncValue.data(count);
+        }
+      }
+    } catch (e) {
+      // Don't update state on error during silent refresh
+    } finally {
+      _isLoading = false;
+    }
+  }
+
   void increment() {
     if (_disposed) return;
-    state.whenData((count) {
-      if (_disposed) return;
-      final newCount = count + 1;
-      state = AsyncValue.data(newCount);
-    });
     
-    // If state is not AsyncData, handle it
-    if (state is! AsyncData) {
-      state = const AsyncValue.data(1);
+    try {
+      // Handle different state types safely
+      if (state is AsyncData) {
+        final currentCount = state.value ?? 0;
+        final newCount = currentCount + 1;
+        if (!_disposed) {
+          state = AsyncValue.data(newCount);
+        }
+      } else {
+        // If state is not AsyncData, set to 1
+        if (!_disposed) {
+          state = const AsyncValue.data(1);
+        }
+      }
+    } catch (e) {
+      // Ignore errors if disposed
     }
   }
 
   void decrement() {
     if (_disposed) return;
-    state.whenData((count) {
-      if (_disposed) return;
-      final newCount = (count - 1).clamp(0, double.infinity).toInt();
-      state = AsyncValue.data(newCount);
-    });
+    
+    try {
+      // Handle different state types safely
+      if (state is AsyncData) {
+        final currentCount = state.value ?? 0;
+        final newCount = (currentCount - 1).clamp(0, double.infinity).toInt();
+        if (!_disposed) {
+          state = AsyncValue.data(newCount);
+        }
+      } else {
+        // If state is not AsyncData, set to 0
+        if (!_disposed) {
+          state = const AsyncValue.data(0);
+        }
+      }
+    } catch (e) {
+      // Ignore errors if disposed
+    }
   }
 
   void reset() {
@@ -251,6 +489,12 @@ class UnreadCountNotifier extends StateNotifier<AsyncValue<int>> {
   @override
   void dispose() {
     _disposed = true;
+    
+    // Remove from real-time update listeners
+    if (userId != null) {
+      NotificationManager.removeListener(userId!);
+    }
+    
     super.dispose();
   }
 } 

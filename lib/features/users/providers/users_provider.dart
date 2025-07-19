@@ -86,4 +86,9 @@ class UsersNotifier extends StateNotifier<AsyncValue<List<UserProfile>>> {
       rethrow;
     }
   }
+
+  // Refresh users
+  Future<void> refresh() async {
+    await loadUsers();
+  }
 }

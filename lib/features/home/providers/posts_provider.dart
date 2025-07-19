@@ -51,7 +51,7 @@ class PostsNotifier extends StateNotifier<List<Post>> {
     ];
     // Call server
     try {
-      await PostService().likePost(post.id, userId);
+      await PostService().likePost(post.id, userId, ref: ref);
     } catch (e) {
       // Revert optimistic update on error
       await loadPosts();
@@ -74,5 +74,29 @@ class PostsNotifier extends StateNotifier<List<Post>> {
       // Revert optimistic update on error
       await loadPosts();
     }
+  }
+
+  Future<void> deletePost(Post post) async {
+    // Only allow deletion if user owns the post
+    if (post.userId != userId) {
+      throw Exception('You can only delete your own posts');
+    }
+
+    // Optimistically remove from UI
+    state = state.where((p) => p.id != post.id).toList();
+    
+    // Call server
+    try {
+      await PostService().deletePost(post.id, userId);
+    } catch (e) {
+      // Revert optimistic update on error
+      await loadPosts();
+      rethrow;
+    }
+  }
+
+  // Refresh posts
+  Future<void> refresh() async {
+    await loadPosts();
   }
 }

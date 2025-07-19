@@ -97,6 +97,7 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
         userId: userId!,
         content: content,
         parentCommentId: parentCommentId,
+        ref: ref,
       );
 
       if (newComment != null) {
@@ -161,7 +162,7 @@ class CommentsNotifier extends StateNotifier<AsyncValue<List<Comment>>> {
       });
 
       // Call the service
-      await CommentService().likeComment(commentId, userId!);
+      await CommentService().likeComment(commentId, userId!, ref: ref);
       print('Provider: Comment liked successfully');
     } catch (e) {
       print('Provider: Error liking comment: $e');

@@ -1,8 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/home/models/comment.dart';
 import '../services/notification_service.dart';
 import '../models/notification.dart';
+import '../providers/notification_provider.dart';
 
 class CommentService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -151,6 +153,7 @@ class CommentService {
     required String userId,
     required String content,
     String? parentCommentId,
+    Ref? ref,
   }) async {
     try {
       
@@ -187,6 +190,7 @@ class CommentService {
 
       // --- Notification integration for replies ---
       if (parentCommentId != null) {
+        print('CommentService: Creating reply notification for comment: $parentCommentId');
         // Get parent comment owner
         final parentComment = await _supabase
             .from('comments')
@@ -194,19 +198,27 @@ class CommentService {
             .eq('id', parentCommentId)
             .single();
         final parentCommentOwnerId = parentComment['user_id'];
+        print('CommentService: Parent comment owner: $parentCommentOwnerId, current user: $userId');
         if (parentCommentOwnerId != userId) {
+          print('CommentService: Creating comment reply notification');
           await NotificationService().createCommentReplyNotification(
             commentId: response['id'],
             fromUserId: userId,
             parentCommentOwnerId: parentCommentOwnerId,
             // Do not set created_at here
           );
+          
+          // Note: UI updates should be handled by the calling widget, not the service
+          print('CommentService: Comment reply notification created - UI will update on next poll');
+        } else {
+          print('CommentService: Skipping reply notification - user is commenting on their own comment');
         }
       }
       // --- End notification integration ---
 
       // --- Notification integration for comments on post ---
       if (parentCommentId == null) {
+        print('CommentService: Creating post comment notification for post: $postId');
         // This is a top-level comment (not a reply)
         // Get post owner
         final post = await _supabase
@@ -215,7 +227,9 @@ class CommentService {
             .eq('id', postId)
             .single();
         final postOwnerId = post['user_id'];
+        print('CommentService: Post owner: $postOwnerId, current user: $userId');
         if (postOwnerId != userId) {
+          print('CommentService: Creating post comment notification');
           await NotificationService().createNotification(
             userId: postOwnerId,
             fromUserId: userId,
@@ -225,6 +239,11 @@ class CommentService {
             postId: postId,
             commentId: response['id'],
           );
+          
+          // Note: UI updates should be handled by the calling widget, not the service
+          print('CommentService: Post comment notification created - UI will update on next poll');
+        } else {
+          print('CommentService: Skipping post comment notification - user is commenting on their own post');
         }
       }
       // --- End notification integration ---
@@ -242,7 +261,7 @@ class CommentService {
   }
 
   // Like a comment
-  Future<void> likeComment(String commentId, String userId) async {
+  Future<void> likeComment(String commentId, String userId, {Ref? ref}) async {
     try {
       
       await _supabase
@@ -273,6 +292,16 @@ class CommentService {
           fromUserId: userId,
           commentOwnerId: commentOwnerId,
         );
+        
+        // Immediately update UI if ref is provided
+        if (ref != null) {
+          try {
+            ref.read(unreadNotificationCountProvider(commentOwnerId).notifier).increment();
+            ref.read(notificationsProvider(commentOwnerId).notifier).refresh();
+          } catch (e) {
+            // Ignore errors if providers are disposed
+          }
+        }
       }
       // --- End notification integration ---
     } catch (e) {

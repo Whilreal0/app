@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/notification_provider.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../core/providers/auth_provider.dart';
 import '../../../core/models/notification.dart' as model;
 
-class NotificationCenterScreen extends ConsumerWidget {
-  const NotificationCenterScreen({Key? key}) : super(key: key);
+class NotificationCenterScreen extends ConsumerStatefulWidget {
+  const NotificationCenterScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NotificationCenterScreen> createState() => _NotificationCenterScreenState();
+}
+
+class _NotificationCenterScreenState extends ConsumerState<NotificationCenterScreen> {
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     
     return authState.when(
@@ -27,7 +32,21 @@ class NotificationCenterScreen extends ConsumerWidget {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Notifications'),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
             actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh notifications',
+                onPressed: () async {
+                  try {
+                    await notifier.refresh();
+                  } catch (e) {
+                    // If notifier is disposed, just return
+                    return;
+                  }
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.mark_email_read_outlined),
                 tooltip: 'Mark all as read',
@@ -42,23 +61,41 @@ class NotificationCenterScreen extends ConsumerWidget {
               ),
             ],
           ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              try {
-                await notifier.refresh();
-              } catch (e) {
-                // If notifier is disposed, just return
-                return;
+          body: notificationsAsync.when(
+            data: (notifications) {
+              if (notifications.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.notifications_none,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'No notifications yet',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
               }
-            },
-            child: notificationsAsync.when(
-              data: (notifications) {
-                if (notifications.isEmpty) {
-                  return const Center(
-                    child: Text('No notifications yet.', style: TextStyle(color: Colors.grey)),
-                  );
-                }
-                return ListView.separated(
+
+              return RefreshIndicator(
+                onRefresh: () async {
+                  try {
+                    await notifier.refresh();
+                  } catch (e) {
+                    // If notifier is disposed, just return
+                    return;
+                  }
+                },
+                child: ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   itemCount: notifications.length,
                   separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.transparent),
@@ -196,7 +233,7 @@ class NotificationCenterScreen extends ConsumerWidget {
                           );
                         }
                       },
-                      child: _NotificationTile(
+                      child: NotificationTile(
                         notification: notification,
                         onTap: () async {
                           // If the notification is unread, decrement the count before marking as read
@@ -246,12 +283,12 @@ class NotificationCenterScreen extends ConsumerWidget {
                       ),
                     );
                   },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(
-                child: Text('Error loading notifications: $error', style: const TextStyle(color: Colors.red)),
-              ),
+                ),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => Center(
+              child: Text('Error: $error'),
             ),
           ),
         );
@@ -266,91 +303,73 @@ class NotificationCenterScreen extends ConsumerWidget {
   }
 }
 
-class _NotificationTile extends StatelessWidget {
+class NotificationTile extends StatelessWidget {
   final model.Notification notification;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
-  const _NotificationTile({required this.notification, required this.onTap});
+  const NotificationTile({
+    super.key,
+    required this.notification,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isUnread = !notification.isRead;
-    return Material(
-      color: isUnread ? Colors.blue.shade50.withOpacity(0.08) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                backgroundColor: notification.iconColor.withOpacity(0.15),
-                child: Icon(notification.icon, color: notification.iconColor, size: 22),
-                radius: 22,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      notification.displayTitle,
-                      style: TextStyle(
-                        fontWeight: isUnread ? FontWeight.bold : FontWeight.w500,
-                        color: isUnread ? Colors.white : Colors.grey.shade300,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      notification.displayMessage,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                children: [
-                  if (isUnread)
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _formatTimestamp(notification.createdAt),
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundImage: notification.fromAvatarUrl != null
+            ? NetworkImage(notification.fromAvatarUrl!)
+            : null,
+        child: notification.fromAvatarUrl == null
+            ? Text(notification.fromUsername?.substring(0, 1).toUpperCase() ?? '?')
+            : null,
+      ),
+      title: Text(
+        notification.title,
+        style: TextStyle(
+          fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
         ),
       ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(notification.message),
+          const SizedBox(height: 4),
+          Text(
+            _formatTimestamp(notification.createdAt),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+      trailing: notification.isRead
+          ? null
+          : Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.blue,
+                shape: BoxShape.circle,
+              ),
+            ),
+      onTap: onTap,
     );
   }
-}
 
-String _formatTimestamp(DateTime timestamp) {
-  final now = DateTime.now();
-  final difference = now.difference(timestamp);
-  if (difference.inMinutes < 1) return 'Just now';
-  if (difference.inHours < 1) return '${difference.inMinutes}m ago';
-  if (difference.inDays < 1) return '${difference.inHours}h ago';
-  if (difference.inDays < 7) return '${difference.inDays}d ago';
-  if (difference.inDays < 30) return '${(difference.inDays / 7).floor()}w ago';
-  if (difference.inDays < 365) return '${(difference.inDays / 30).floor()}mo ago';
-  return '${(difference.inDays / 365).floor()}y ago';
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
 } 
