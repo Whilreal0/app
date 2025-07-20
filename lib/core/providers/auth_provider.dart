@@ -71,6 +71,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._authService) : super(AuthState());
 
+  void clearError() {
+    state = state.copyWith(error: null);
+  }
+
   Future<void> signIn(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     
@@ -78,7 +82,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _authService.signIn(email, password);
       state = state.copyWith(isLoading: false, isAuthenticated: true);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      String errorMessage = e.toString();
+      if (errorMessage.contains('Invalid login credentials')) {
+        errorMessage = 'Invalid login credentials';
+      } else if (errorMessage.contains('Email not confirmed')) {
+        errorMessage = 'Email not confirmed';
+      } else if (errorMessage.contains('Too many requests')) {
+        errorMessage = 'Too many requests';
+      }
+      state = state.copyWith(isLoading: false, error: errorMessage);
     }
   }
 
@@ -89,7 +101,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _authService.signUp(email, password, fullname, username);
       state = state.copyWith(isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      String errorMessage = e.toString();
+      if (errorMessage.contains('User already registered')) {
+        errorMessage = 'User already registered';
+      } else if (errorMessage.contains('Username already taken')) {
+        errorMessage = 'Username already taken';
+      } else if (errorMessage.contains('Password should be at least')) {
+        errorMessage = 'Password should be at least 6 characters';
+      } else if (errorMessage.contains('Invalid email')) {
+        errorMessage = 'Invalid email';
+      }
+      state = state.copyWith(isLoading: false, error: errorMessage);
     }
   }
 

@@ -22,7 +22,28 @@ class AuthService {
     }
   }
 
+  Future<bool> isUsernameAvailable(String username) async {
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select('username')
+          .ilike('username', username)
+          .maybeSingle();
+      
+      return response == null;
+    } catch (e) {
+      // If there's an error, assume username is not available
+      return false;
+    }
+  }
+
   Future<void> signUp(String email, String password, String fullname, String username) async {
+    // Check if username is already taken
+    final isAvailable = await isUsernameAvailable(username);
+    if (!isAvailable) {
+      throw Exception('Username already taken');
+    }
+
     final response = await Supabase.instance.client.auth.signUp(
       email: email,
       password: password,
