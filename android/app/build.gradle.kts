@@ -31,7 +31,7 @@ android {
 
     buildTypes {
     debug {
-        applicationIdSuffix ".debug"
+        applicationIdSuffix(".debug")
     }
 }
 }
