@@ -39,9 +39,13 @@ class _AuthFormState extends ConsumerState<AuthForm> {
 
   void _clearError() {
     _errorTimer?.cancel();
-    setState(() {
-      _customError = null;
-    });
+    if (_customError != null) {
+      setState(() {
+        _customError = null;
+      });
+      // Also clear the provider error
+      ref.read(authNotifierProvider.notifier).clearError();
+    }
   }
 
   void _setErrorWithTimeout(String error) {
@@ -49,12 +53,24 @@ class _AuthFormState extends ConsumerState<AuthForm> {
     setState(() {
       _customError = error;
     });
-    
-    _errorTimer = Timer(const Duration(seconds: 5), () {
+
+    _errorTimer = Timer(const Duration(seconds: 10), () { // <-- 10 seconds now
       if (mounted) {
         setState(() {
           _customError = null;
+          // Clear input fields after error disappears
+          if (_isSignUp) {
+            _emailController.clear();
+            _usernameController.clear();
+            _fullnameController.clear();
+            _passwordController.clear();
+          } else {
+            _emailOrUsernameController.clear();
+            _passwordController.clear();
+          }
         });
+        // Clear the provider error as well!
+        ref.read(authNotifierProvider.notifier).clearError();
       }
     });
   }
@@ -359,6 +375,7 @@ class _AuthFormState extends ConsumerState<AuthForm> {
                 }
                 return null;
               },
+              onChanged: (_) => _clearError(), // <-- Add this line
             ),
             const SizedBox(height: 16),
           ],
@@ -381,6 +398,7 @@ class _AuthFormState extends ConsumerState<AuthForm> {
               }
               return null;
             },
+            onChanged: (_) => _clearError(), // <-- Add this line
           ),
           const SizedBox(height: 24),
           SizedBox(

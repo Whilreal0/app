@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../../features/auth/screens/auth_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
@@ -17,26 +18,44 @@ import '../../features/settings/screens/notification_settings_screen.dart';
 import '../../features/settings/screens/reported_posts_screen.dart';
 import '../../features/users/screens/users_screen.dart';
 import '../../shared/widgets/main_layout.dart';
+import 'package:flutter/foundation.dart';
+
+// Add this class
+class AuthChangeNotifier extends ChangeNotifier {
+  User? _user;
+  AuthChangeNotifier(Stream<User?> authStream) {
+    authStream.listen((user) {
+      if (_user != user) {
+        _user = user;
+        notifyListeners();
+      }
+    });
+  }
+}
+
+final authChangeNotifierProvider = Provider<AuthChangeNotifier>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  return AuthChangeNotifier(authService.authStateChanges);
+});
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
-  
+  final authChangeNotifier = ref.watch(authChangeNotifierProvider);
+
   return GoRouter(
     initialLocation: '/',
+    refreshListenable: authChangeNotifier, // <--- Add this line
     redirect: (context, state) {
       return authState.when(
         data: (user) {
           final isLoggedIn = user != null;
           final isLoggingIn = state.matchedLocation == '/auth';
-          final isDashboard = state.matchedLocation == '/dashboard';
-          
           if (!isLoggedIn && !isLoggingIn) return '/auth';
           if (isLoggedIn && isLoggingIn) return '/';
-          if (isDashboard) return '/'; // Redirect dashboard to home
           return null;
         },
         loading: () => null,
-        error: (_, __) => '/auth',
+        error: (_, __) => null,
       );
     },
     routes: [
