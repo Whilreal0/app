@@ -28,7 +28,7 @@ jobs:
           echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" >> .env
 
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-shrink
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
