@@ -62,7 +62,7 @@ class ProfileScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Profile Card
+                // Redesigned Profile Card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -70,33 +70,73 @@ class ProfileScreen extends ConsumerWidget {
                     color: AppTheme.surfaceColor,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Column(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: roleColor,
-                          borderRadius: BorderRadius.circular(40),
-                        ),
-                        child: const Icon(
-                          Icons.shield,
-                          color: Colors.white,
-                          size: 32,
+                      // Avatar
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: roleColor,
+                        backgroundImage: profile.avatarUrl != null && profile.avatarUrl.isNotEmpty
+                            ? NetworkImage(profile.avatarUrl)
+                            : null,
+                        child: (profile.avatarUrl == null || profile.avatarUrl.isEmpty)
+                            ? const Icon(Icons.person, color: Colors.white, size: 40)
+                            : null,
+                      ),
+                      const SizedBox(width: 24),
+                      // User Info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              profile.fullname ?? '',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '@${profile.username}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Joined ${profile.createdAt.day}/${profile.createdAt.month}/${profile.createdAt.year}',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      _buildInfoRow(Icons.email, profile.email),
-                      const SizedBox(height: 16),
-                      _buildInfoRow(
-                        Icons.shield,
-                        profile.role.toUpperCase(),
-                        color: roleColor,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildInfoRow(
-                        Icons.calendar_today,
-                        'Joined ${profile.createdAt.day}/${profile.createdAt.month}/${profile.createdAt.year}',
+                      // Edit/Delete Buttons
+                      Column(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () {}, // TODO: Add edit logic
+                            tooltip: 'Edit Profile',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {}, // TODO: Add delete logic
+                            tooltip: 'Delete Account',
+                          ),
+                        ],
                       ),
                     ],
                   ),

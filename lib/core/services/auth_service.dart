@@ -37,6 +37,20 @@ class AuthService {
     }
   }
 
+  Future<bool> isEmailAvailable(String email) async {
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle();
+      return response == null;
+    } catch (e) {
+      // If there's an error, assume email is not available
+      return false;
+    }
+  }
+
   Future<void> signUp(String email, String password, String fullname, String username) async {
     // Check if username is already taken
     final isAvailable = await isUsernameAvailable(username);
@@ -44,27 +58,36 @@ class AuthService {
       throw Exception('Username already taken');
     }
 
-    final response = await Supabase.instance.client.auth.signUp(
-      email: email,
-      password: password,
-      data: {
-        'fullname': fullname,
-        'username': username,
-      },
-    );
-
-    final user = response.user;
-    if (user == null) {
-      throw Exception('Sign up failed');
-    }
-
-    await Supabase.instance.client
-        .from('profiles')
-        .update({
+    try {
+      final response = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        data: {
           'fullname': fullname,
           'username': username,
-        })
-        .eq('id', user.id);
+        },
+      );
+
+      final user = response.user;
+      if (user == null) {
+        throw Exception('Sign up failed');
+      }
+
+      await Supabase.instance.client
+          .from('profiles')
+          .update({
+            'fullname': fullname,
+            'username': username,
+          })
+          .eq('id', user.id);
+    } on AuthException catch (e) {
+      if (e.message.contains('User already registered') || e.message.contains('user_already_exists') || e.message.contains('Email address already exists')) {
+        throw Exception('Email already taken');
+      }
+      rethrow;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<void> signOut() async {
