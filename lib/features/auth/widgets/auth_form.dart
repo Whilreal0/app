@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/auth_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
+import 'package:go_router/go_router.dart';
 
 class AuthForm extends ConsumerStatefulWidget {
   const AuthForm({super.key});
@@ -25,6 +26,13 @@ class _AuthFormState extends ConsumerState<AuthForm> {
   bool _isCheckingUsername = false;
   bool _isUsernameAvailable = true;
   Timer? _usernameCheckTimer;
+  bool _isEmailTaken = false;
+  Timer? _emailCheckTimer;
+  int _redirectCountdown = 5;
+  Timer? _redirectTimer;
+  bool _hasStartedRedirect = false;
+  String? _lastSuccess;
+  bool _showSuccess = false;
 
   @override
   void dispose() {
@@ -34,6 +42,8 @@ class _AuthFormState extends ConsumerState<AuthForm> {
     _passwordController.dispose();
     _errorTimer?.cancel();
     _usernameCheckTimer?.cancel();
+    _emailCheckTimer?.cancel();
+    _redirectTimer?.cancel();
     super.dispose();
   }
 
@@ -120,6 +130,33 @@ class _AuthFormState extends ConsumerState<AuthForm> {
     });
   }
 
+  void _checkEmailAvailability(String email) {
+    _emailCheckTimer?.cancel();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _isEmailTaken = false;
+      });
+      return;
+    }
+    _emailCheckTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final authNotifier = ref.read(authNotifierProvider.notifier);
+        final isAvailable = await authNotifier.isEmailAvailable(email);
+        if (mounted) {
+          setState(() {
+            _isEmailTaken = !isAvailable;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isEmailTaken = false;
+          });
+        }
+      }
+    });
+  }
+
   String _getErrorMessage(String error) {
     if (error.contains('Invalid login credentials')) {
       return 'Invalid email/username or password. Please check your credentials and try again.';
@@ -141,6 +178,8 @@ class _AuthFormState extends ConsumerState<AuthForm> {
       return 'Username must be 25 characters or less.';
     } else if (error.contains('Invalid email')) {
       return 'Please enter a valid email address.';
+    } else if (error.contains('Email already taken')) {
+      return 'An account with this email already exists. Please sign in instead.';
     } else {
       return 'An error occurred. Please try again.';
     }
@@ -156,14 +195,14 @@ class _AuthFormState extends ConsumerState<AuthForm> {
       if (_isSignUp) {
         authNotifier.signUp(
           _emailController.text,
-          _passwordController.text,
+          _passwordController.text.trim(), // Trim whitespace from password
           _fullnameController.text,
-          _usernameController.text,
+          _usernameController.text.trim(),
         );
       } else {
         // Username or email sign in logic
         String input = _emailOrUsernameController.text.trim();
-        String password = _passwordController.text;
+        String password = _passwordController.text.trim(); // Trim whitespace from password
 
         String email = input;
         if (!input.contains('@')) {
@@ -259,14 +298,111 @@ class _AuthFormState extends ConsumerState<AuthForm> {
     );
   }
 
+  Widget _buildSuccessWidget(String message) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFDCFCE7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFBBF7D0),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFBBF7D0),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_circle_outline,
+              color: Color(0xFF22C55E),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Color(0xFF166534),
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool get _formIsPristine =>
+  _fullnameController.text.isEmpty &&
+  _usernameController.text.isEmpty &&
+  _emailController.text.isEmpty &&
+  _passwordController.text.isEmpty;
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
+
+    // Reset local state when a new registration is successful
+    if (_isSignUp && authState.success != null && authState.success != _lastSuccess) {
+      _lastSuccess = authState.success;
+      _showSuccess = true; // Only show after real registration
+      _hasStartedRedirect = false;
+      _redirectCountdown = 5;
+      _redirectTimer?.cancel();
+      _redirectTimer = null;
+    }
+
+    // Start redirect timer only once per new success event
+    if (_isSignUp && authState.success != null && !_hasStartedRedirect && _redirectTimer == null && _redirectCountdown == 5) {
+      _hasStartedRedirect = true;
+      _redirectTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) return;
+        setState(() {
+          _redirectCountdown--;
+        });
+        if (_redirectCountdown == 0) {
+          timer.cancel();
+          _redirectTimer = null;
+          _hasStartedRedirect = false;
+          _redirectCountdown = 5;
+          ref.read(authNotifierProvider.notifier).clearSuccess();
+          if (mounted) {
+            setState(() {
+              _isSignUp = false;
+              _emailOrUsernameController.clear();
+              _emailController.clear();
+              _usernameController.clear();
+              _fullnameController.clear();
+              _passwordController.clear();
+            });
+            context.go('/auth');
+          }
+        }
+      });
+    }
+    
+    // Clear success state when switching to login form
+    if (!_isSignUp && authState.success != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(authNotifierProvider.notifier).clearSuccess();
+      });
+    }
     
     // Handle provider errors with timeout
     if (authState.error != null && _customError == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _setErrorWithTimeout(_getErrorMessage(authState.error!));
+        setState(() {
+          _isEmailTaken = authState.error!.contains('Email already taken');
+        });
       });
     }
     
@@ -276,6 +412,12 @@ class _AuthFormState extends ConsumerState<AuthForm> {
       key: _formKey,
       child: Column(
         children: [
+          // Success message display (only in sign up mode)
+          if (_isSignUp && authState.success != null && authState.success == _lastSuccess && _showSuccess && !_formIsPristine) ...[
+            _buildSuccessWidget(
+              '${authState.success!}\nRedirecting to login in $_redirectCountdown seconds...'
+            ),
+          ],
           // Error message display
           if (errorMessage != null) ...[
             _buildErrorWidget(_getErrorMessage(errorMessage)),
@@ -345,9 +487,16 @@ class _AuthFormState extends ConsumerState<AuthForm> {
             // Email (Sign Up only)
             TextFormField(
               controller: _emailController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Email',
-                prefixIcon: Icon(Icons.email),
+                prefixIcon: const Icon(Icons.email),
+                suffixIcon: _isEmailTaken
+                    ? const Icon(Icons.error, color: Colors.red)
+                    : null,
+                helperText: _isEmailTaken
+                    ? 'Email is already taken'
+                    : null,
+                helperStyle: const TextStyle(color: Colors.red),
               ),
               keyboardType: TextInputType.emailAddress,
               validator: (value) {
@@ -357,7 +506,13 @@ class _AuthFormState extends ConsumerState<AuthForm> {
                 if (!value.contains('@')) {
                   return 'Please enter a valid email';
                 }
+                if (_isEmailTaken) {
+                  return 'Email is already taken';
+                }
                 return null;
+              },
+              onChanged: (value) {
+                _checkEmailAvailability(value);
               },
             ),
             const SizedBox(height: 16),
@@ -429,8 +584,23 @@ class _AuthFormState extends ConsumerState<AuthForm> {
           const SizedBox(height: 16),
           TextButton(
             onPressed: () {
-              _clearError();
-              setState(() => _isSignUp = !_isSignUp);
+              setState(() {
+                _isSignUp = true;
+                _showSuccess = false; // Hide success message on mode switch
+                _hasStartedRedirect = false;
+                _redirectCountdown = 5;
+                _redirectTimer?.cancel();
+                _redirectTimer = null;
+                _lastSuccess = null;
+                _emailOrUsernameController.clear();
+                _emailController.clear();
+                _usernameController.clear();
+                _fullnameController.clear();
+                _passwordController.clear();
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref.read(authNotifierProvider.notifier).clearSuccess();
+              });
             },
             child: Text(
               _isSignUp

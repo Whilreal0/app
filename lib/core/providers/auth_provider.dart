@@ -52,22 +52,26 @@ class AuthState {
   final bool isLoading;
   final String? error;
   final bool isAuthenticated;
+  final String? success; // <-- Add this
 
   AuthState({
     this.isLoading = false,
     this.error,
     this.isAuthenticated = false,
+    this.success, // <-- Add this
   });
 
   AuthState copyWith({
     bool? isLoading,
     String? error,
     bool? isAuthenticated,
+    String? success, // <-- Add this
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
       error: error,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
+      success: success ?? this.success, // <-- Add this
     );
   }
 }
@@ -79,6 +83,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void clearError() {
     state = state.copyWith(error: null);
+  }
+
+  void clearSuccess() {
+    state = state.copyWith(success: null);
   }
 
   Future<void> signIn(String email, String password) async {
@@ -110,20 +118,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       final response = await _authService.signUp(email, password, fullname, username);
       print('Sign up successful');
-      state = state.copyWith(isLoading: false, error: 'Registration successful! Please check your email and confirm your account before signing in.');
+      state = state.copyWith(isLoading: false, error: null, success: 'Registration successful! Please check your email and confirm your account before signing in.');
     } catch (e) {
       print('Sign up error: $e');
       String errorMessage = e.toString();
-      if (errorMessage.contains('Invalid login credentials')) {
-        errorMessage = 'Invalid login credentials';
-      } else if (errorMessage.contains('Email not confirmed')) {
-        errorMessage = 'Email not confirmed';
-      } else if (errorMessage.contains('Too many requests')) {
-        errorMessage = 'Too many requests';
-      } else if (errorMessage.contains('Email confirmation required')) {
-        errorMessage = 'Registration successful! Please check your email and confirm your account before signing in.';
+      if (errorMessage.contains('Username already taken')) {
+        errorMessage = 'This username is already taken. Please choose a different username.';
+      } else if (errorMessage.contains('Email already taken')) {
+        errorMessage = 'An account with this email already exists. Please sign in instead.';
       }
-      state = state.copyWith(isLoading: false, error: errorMessage);
+      state = state.copyWith(isLoading: false, error: errorMessage, success: null);
     }
   }
 
@@ -137,6 +141,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
+
+  Future<bool> isEmailAvailable(String email) async {
+    return await _authService.isEmailAvailable(email);
+  }
 }
 
 class AuthChangeNotifier extends ChangeNotifier {
@@ -149,4 +157,13 @@ class AuthChangeNotifier extends ChangeNotifier {
       }
     });
   }
+}
+
+Future<bool> isEmailAvailable(String email) async {
+  final response = await Supabase.instance.client
+      .from('auth.users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+  return response == null;
 }
