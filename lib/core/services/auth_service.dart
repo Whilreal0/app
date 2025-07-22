@@ -150,6 +150,20 @@ class AuthService {
       throw Exception('Failed to update role: You may not have permission or user not found.');
     }
   }
+
+  Future<void> deleteAccountWithEdgeFunction(String userId) async {
+    final response = await Supabase.instance.client.functions.invoke(
+      'delete-user',
+      body: {'user_id': userId},
+    );
+    // Check for error in response
+    if (response.status != 200) {
+      throw Exception('Failed to delete user: ${response.data}');
+    }
+    if (response.data != null && response.data is Map && response.data['error'] != null) {
+      throw Exception('Failed to delete user: ${response.data['error']}');
+    }
+  }
 }
 
 final supabase = Supabase.instance.client;
