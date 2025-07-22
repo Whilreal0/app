@@ -145,6 +145,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> isEmailAvailable(String email) async {
     return await _authService.isEmailAvailable(email);
   }
+
+  Future<void> deleteAccount(String userId) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _authService.deleteAccountWithEdgeFunction(userId);
+      state = state.copyWith(isLoading: false, isAuthenticated: false, success: 'Account deleted');
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
 }
 
 class AuthChangeNotifier extends ChangeNotifier {

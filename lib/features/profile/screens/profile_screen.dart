@@ -4,6 +4,8 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/providers/bottom_nav_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // For User type
+
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -68,45 +70,66 @@ class ProfileScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Avatar
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: roleColor,
-                        backgroundImage: profile.avatarUrl != null && profile.avatarUrl.isNotEmpty
-                            ? NetworkImage(profile.avatarUrl)
-                            : null,
-                        child: (profile.avatarUrl == null || profile.avatarUrl.isEmpty)
-                            ? const Icon(Icons.person, color: Colors.white, size: 40)
-                            : null,
+                      // Avatar with border
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.10),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 40,
+                          backgroundColor: roleColor,
+                          backgroundImage: (profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty)
+                              ? NetworkImage(profile.avatarUrl!)
+                              : null,
+                          child: (profile.avatarUrl == null || profile.avatarUrl!.isEmpty)
+                              ? const Icon(Icons.person, color: Colors.white, size: 40)
+                              : null,
+                        ),
                       ),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 28),
                       // User Info
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              profile.fullname ?? '',
+                              profile.fullName ?? '',
                               style: const TextStyle(
-                                fontSize: 22,
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 6),
                             Text(
                               '@${profile.username}',
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             Row(
                               children: [
                                 const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
@@ -125,15 +148,50 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                       // Edit/Delete Buttons
                       Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () {}, // TODO: Add edit logic
+                          _ProfileActionButton(
+                            icon: Icons.edit,
+                            color: Colors.blue,
+                            onTap: () {},
                             tooltip: 'Edit Profile',
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () {}, // TODO: Add delete logic
+                          const SizedBox(height: 12),
+                          _ProfileActionButton(
+                            icon: Icons.delete,
+                            color: Colors.red,
+                            onTap: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Delete Account'),
+                                  content: const Text('Are you sure you want to delete your account? This action cannot be undone.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(true),
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) {
+                                final notifier = ref.read(authNotifierProvider.notifier);
+                                final userId = ref.read(userProfileProvider).value?.id;
+                                if (userId != null) {
+                                  await notifier.deleteAccount(userId);
+                                  try {
+                                    await Supabase.instance.client.auth.signOut();
+                                  } catch (e) {
+                                    // Ignore 403 errors after user deletion
+                                  }
+                                }
+                              }
+                            },
                             tooltip: 'Delete Account',
                           ),
                         ],
@@ -232,6 +290,43 @@ class ProfileScreen extends ConsumerWidget {
         style: const TextStyle(
           fontSize: 14,
           color: Colors.green,
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  const _ProfileActionButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    required this.tooltip,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Tooltip(
+          message: tooltip,
+          child: Container(
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: color, size: 24),
+          ),
         ),
       ),
     );

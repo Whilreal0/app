@@ -38,11 +38,15 @@ final authChangeNotifierProvider = Provider<AuthChangeNotifier>((ref) {
   return AuthChangeNotifier(authService.authStateChanges);
 });
 
+// Add a global navigator key for GoRouter
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
   final authChangeNotifier = ref.watch(authChangeNotifierProvider);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey, // Use the global key
     initialLocation: '/',
     refreshListenable: authChangeNotifier, // <--- Add this line
     redirect: (context, state) {
