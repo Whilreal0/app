@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import 'package:flutter/foundation.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -40,6 +41,11 @@ final userIdProvider = Provider<String>((ref) {
     loading: () => throw Exception('User not logged in'),
     error: (_, __) => throw Exception('User not logged in'),
   );
+});
+
+final authChangeNotifierProvider = Provider<AuthChangeNotifier>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  return AuthChangeNotifier(authService.authStateChanges);
 });
 
 class AuthState {
@@ -98,18 +104,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      await _authService.signUp(email, password, fullname, username);
-      state = state.copyWith(isLoading: false);
+      final isAvailable = await _authService.isUsernameAvailable(username);
+      if (!isAvailable) {
+        throw Exception('Username already taken');
+      }
+      final response = await _authService.signUp(email, password, fullname, username);
+      print('Sign up successful');
+      state = state.copyWith(isLoading: false, error: 'Registration successful! Please check your email and confirm your account before signing in.');
     } catch (e) {
+      print('Sign up error: $e');
       String errorMessage = e.toString();
-      if (errorMessage.contains('User already registered')) {
-        errorMessage = 'User already registered';
-      } else if (errorMessage.contains('Username already taken')) {
-        errorMessage = 'Username already taken';
-      } else if (errorMessage.contains('Password should be at least')) {
-        errorMessage = 'Password should be at least 6 characters';
-      } else if (errorMessage.contains('Invalid email')) {
-        errorMessage = 'Invalid email';
+      if (errorMessage.contains('Invalid login credentials')) {
+        errorMessage = 'Invalid login credentials';
+      } else if (errorMessage.contains('Email not confirmed')) {
+        errorMessage = 'Email not confirmed';
+      } else if (errorMessage.contains('Too many requests')) {
+        errorMessage = 'Too many requests';
+      } else if (errorMessage.contains('Email confirmation required')) {
+        errorMessage = 'Registration successful! Please check your email and confirm your account before signing in.';
       }
       state = state.copyWith(isLoading: false, error: errorMessage);
     }
@@ -124,5 +136,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
+  }
+}
+
+class AuthChangeNotifier extends ChangeNotifier {
+  User? _user;
+  AuthChangeNotifier(Stream<User?> authStream) {
+    authStream.listen((user) {
+      if (_user != user) {
+        _user = user;
+        notifyListeners();
+      }
+    });
   }
 }

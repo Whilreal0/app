@@ -33,6 +33,17 @@ Future<void> signInWithUsernameOrEmail(String usernameOrEmail, String password) 
   }
 }
 
+Future<void> signInAndUpdateProfile(String email, String password, String username, String fullname) async {
+  final response = await supabase.auth.signInWithPassword(email: email, password: password);
+  final user = supabase.auth.currentUser;
+  if (user != null) {
+    await supabase.from('profiles').update({
+      'username': username,
+      'fullname': fullname,
+    }).eq('id', user.id);
+  }
+}
+
 class AuthScreen extends ConsumerWidget {
   const AuthScreen({super.key});
 
@@ -68,21 +79,6 @@ class AuthScreen extends ConsumerWidget {
                 const AuthForm(),
                 const SizedBox(height: 40),
                 const DemoAccountsCard(),
-                if (authState.error != null) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      authState.error!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
