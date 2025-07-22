@@ -22,33 +22,37 @@ class AuthService {
     }
   }
 
-  Future<bool> isUsernameAvailable(String username) async {
+  Future<bool> isUsernameAvailable(String username, {String? currentUserId}) async {
     try {
       final response = await _supabase
           .from('profiles')
-          .select('username')
+          .select('id')
           .ilike('username', username)
           .maybeSingle();
-      
-      return response == null;
+      // If no user found, username is available
+      if (response == null) return true;
+      // If the only user with this username is the current user, it's available
+      if (currentUserId != null && response['id'] == currentUserId) return true;
+      // Otherwise, not available
+      return false;
     } catch (e) {
       // If there's an error, assume username is not available
       return false;
     }
   }
 
-  Future<bool> isEmailAvailable(String email) async {
-    try {
-      final response = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', email)
-          .maybeSingle();
-      return response == null;
-    } catch (e) {
-      // If there's an error, assume email is not available
-      return false;
-    }
+  Future<bool> isEmailAvailable(String email, {String? currentUserId}) async {
+    final response = await _supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+    // If no user found, email is available
+    if (response == null) return true;
+    // If the only user with this email is the current user, it's available
+    if (currentUserId != null && response['id'] == currentUserId) return true;
+    // Otherwise, not available
+    return false;
   }
 
   Future<void> signUp(String email, String password, String fullname, String username) async {
@@ -163,6 +167,50 @@ class AuthService {
     if (response.data != null && response.data is Map && response.data['error'] != null) {
       throw Exception('Failed to delete user: ${response.data['error']}');
     }
+  }
+
+  Future<void> updateProfile({
+    required String userId,
+    required String newUsername,
+    required String newEmail,
+  }) async {
+    // Check if username is available
+    final usernameAvailable = await isUsernameAvailable(newUsername, currentUserId: userId);
+    if (!usernameAvailable) {
+      throw Exception('Username already taken');
+    }
+    // Check if email is available
+    final emailAvailable = await isEmailAvailable(newEmail, currentUserId: userId);
+    if (!emailAvailable) {
+      throw Exception('Email already taken');
+    }
+    // Update email in auth.users (current user only)
+    final response = await _supabase.auth.updateUser(
+      UserAttributes(email: newEmail),
+    );
+    if (response.user == null) {
+      throw Exception('Failed to update email');
+    }
+    // Update username and email in profiles
+    final profileResponse = await _supabase
+        .from('profiles')
+        .update({
+          'username': newUsername,
+          'email': newEmail,
+        })
+        .eq('id', userId)
+        .select();
+    if (profileResponse == null || (profileResponse is List && profileResponse.isEmpty)) {
+      throw Exception('Failed to update profile');
+    }
+  }
+
+  Future<void> updateFullName(String userId, String newFullName) async {
+    final response = await _supabase
+        .from('profiles')
+        .update({'fullname': newFullName})
+        .eq('id', userId)
+        .select();
   }
 }
 

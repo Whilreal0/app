@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/post_report_provider.dart';
+import '../../../shared/providers/bottom_nav_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -46,6 +47,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 SizedBox(height: 12),
                 GestureDetector(
                   onTap: () {
+                    ref.read(bottomNavProvider.notifier).state = 4; // or the correct tab index
                     context.go('/profile');
                   },
                   child: Card(
@@ -62,6 +64,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (profile.canManageUsers())
                   GestureDetector(
                     onTap: () {
+                      ref.read(bottomNavProvider.notifier).state = 4; // or the correct tab index
                       context.go('/users');
                     },
                     child: Card(
