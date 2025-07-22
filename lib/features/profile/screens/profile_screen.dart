@@ -5,6 +5,53 @@ import '../../../core/theme/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import '../../../shared/providers/bottom_nav_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; // For User type
+import '../../../core/models/user_profile.dart';
+import '../../../core/services/auth_service.dart';
+
+class UserProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
+  final AuthService _authService;
+  final String userId;
+
+  UserProfileNotifier(this._authService, this.userId) : super(const AsyncValue.loading()) {
+    loadProfile();
+  }
+
+  Future<void> loadProfile() async {
+    state = const AsyncValue.loading();
+    try {
+      final profile = await _authService.getUserProfile(userId);
+      state = AsyncValue.data(profile);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> updateProfile({
+    required String newUsername,
+    required String newFullName,
+    required String newEmail,
+    String? newPassword,
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _authService.updateProfile(
+        userId: userId,
+        newUsername: newUsername,
+        newEmail: newEmail,
+      );
+      await _authService.updateFullName(userId, newFullName);
+      await loadProfile(); // <-- This will update the state and UI
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+}
+
+final userProfileNotifierProvider = StateNotifierProvider<UserProfileNotifier, AsyncValue<UserProfile?>>((ref) {
+  final authService = ref.watch(authServiceProvider);
+  final user = ref.watch(authStateProvider).asData?.value;
+  return UserProfileNotifier(authService, user?.id ?? '');
+});
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -36,7 +83,7 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userProfileAsync = ref.watch(userProfileProvider);
+    final userProfileAsync = ref.watch(userProfileNotifierProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -47,7 +94,8 @@ class ProfileScreen extends ConsumerWidget {
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
-              context.go('/settings'); // or another fallback route
+              ref.read(bottomNavProvider.notifier).state = 0;
+              context.go('/');
             }
           },
         ),
@@ -153,7 +201,16 @@ class ProfileScreen extends ConsumerWidget {
                           _ProfileActionButton(
                             icon: Icons.edit,
                             color: Colors.blue,
-                            onTap: () {},
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => EditProfileDialog(
+                                  initialUsername: profile.username ?? '',
+                                  initialFullName: profile.fullName ?? '',
+                                  initialEmail: profile.email,
+                                ),
+                              );
+                            },
                             tooltip: 'Edit Profile',
                           ),
                           const SizedBox(height: 12),
@@ -181,7 +238,7 @@ class ProfileScreen extends ConsumerWidget {
                               );
                               if (confirmed == true) {
                                 final notifier = ref.read(authNotifierProvider.notifier);
-                                final userId = ref.read(userProfileProvider).value?.id;
+                                final userId = ref.read(userProfileNotifierProvider).value?.id;
                                 if (userId != null) {
                                   await notifier.deleteAccount(userId);
                                   try {
@@ -326,6 +383,242 @@ class _ProfileActionButton extends StatelessWidget {
             ),
             padding: const EdgeInsets.all(10),
             child: Icon(icon, color: color, size: 24),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class EditProfileDialog extends StatefulWidget {
+  final String initialUsername;
+  final String initialFullName;
+  final String initialEmail;
+
+  const EditProfileDialog({
+    Key? key,
+    required this.initialUsername,
+    required this.initialFullName,
+    required this.initialEmail,
+  }) : super(key: key);
+
+  @override
+  State<EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<EditProfileDialog> {
+  late TextEditingController _usernameController;
+  late TextEditingController _fullNameController;
+  late TextEditingController _emailController;
+  late TextEditingController _passwordController;
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String? _error;
+  String? _success;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController = TextEditingController(text: widget.initialUsername);
+    _fullNameController = TextEditingController(text: widget.initialFullName);
+    _emailController = TextEditingController(text: widget.initialEmail);
+    _passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _fullNameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveProfile(BuildContext context, WidgetRef ref) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _success = null;
+    });
+    try {
+      final userProfile = ref.read(userProfileNotifierProvider).value;
+      if (userProfile == null) throw Exception('User not found');
+      await ref.read(authNotifierProvider.notifier).updateProfile(
+        userId: userProfile.id,
+        newUsername: _usernameController.text.trim(),
+        newFullName: _fullNameController.text.trim(),
+        newEmail: _emailController.text.trim(),
+        newPassword: _passwordController.text.isNotEmpty ? _passwordController.text : null,
+      );
+      if (mounted) {
+        setState(() {
+          _success = 'Profile updated successfully!';
+        });
+      }
+      // Refresh profile
+      ref.refresh(userProfileNotifierProvider);
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Avatar with edit icon
+              Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Colors.grey[200],
+                    child: Icon(Icons.person, size: 48, color: Colors.grey[600]),
+                  ),
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: const Icon(Icons.edit, color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _fullNameController.text,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Full Name', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ),
+              TextField(
+                controller: _fullNameController,
+                decoration: const InputDecoration(
+                  border: UnderlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Username', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ),
+              TextField(
+                controller: _usernameController,
+                decoration: InputDecoration(
+                  border: const UnderlineInputBorder(),
+                  isDense: true,
+                  prefixText: '@ ',
+                  suffixIcon: Icon(Icons.check_circle, color: Colors.green[400], size: 20),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Email Address', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              ),
+              TextField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  border: UnderlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Password', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ),
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  border: const UnderlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, size: 20),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_error != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: Colors.red[400], fontSize: 12),
+                  ),
+                )
+              else
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Password should contain at least 8 characters!',
+                    style: TextStyle(color: Colors.red[400], fontSize: 12),
+                  ),
+                ),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: CircularProgressIndicator(),
+                ),
+              if (_success != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(_success!, style: const TextStyle(color: Colors.green)),
+                ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => _saveProfile(context, ref),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Save'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

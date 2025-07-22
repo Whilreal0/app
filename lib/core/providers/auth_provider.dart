@@ -155,6 +155,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
+
+  Future<void> updateProfile({
+    required String userId,
+    required String newUsername,
+    required String newFullName,
+    required String newEmail,
+    String? newPassword,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null, success: null);
+    try {
+      await _authService.updateProfile(
+        userId: userId,
+        newUsername: newUsername,
+        newEmail: newEmail,
+      );
+      // TODO: Add password update logic if needed
+      // Update full name in profiles
+      await _authService.updateFullName(userId, newFullName);
+      state = state.copyWith(isLoading: false, success: 'Profile updated successfully');
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
 }
 
 class AuthChangeNotifier extends ChangeNotifier {

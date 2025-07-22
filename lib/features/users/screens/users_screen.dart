@@ -6,6 +6,7 @@ import '../widgets/user_card.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
+import '../../../shared/providers/bottom_nav_provider.dart';
 
 class UsersScreen extends ConsumerWidget {
   const UsersScreen({super.key});
@@ -21,11 +22,8 @@ class UsersScreen extends ConsumerWidget {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              context.go('/settings'); // fallback
-            }
+            ref.read(bottomNavProvider.notifier).state = 0; // 0 = Home
+            context.go('/');
           },
         ),
       ),
